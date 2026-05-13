@@ -8,6 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import db
+import ai_module
 
 # ===== НАСТРОЙКИ =====
 BOT_TOKEN = "8746574885:AAEjgDVRSdmv9M_gdgDiH32Ax9RALfiGI0A"
@@ -316,7 +317,13 @@ async def subscribe_info(callback: types.CallbackQuery):
 
 @dp.message()
 async def diary_entry(message: types.Message):
-    await message.answer("Запись сохранена. Спасибо, что поделился. 💙", reply_markup=back_to_menu_kb)
+    await message.answer("Секунду, анализирую твою запись...")
+    analysis = await ai_module.analyze_diary_entry(message.text)
+    await message.answer(
+        f"📓 Вот что я заметил в твоей записи:\n\n{analysis}\n\n"
+        "Это не оценка, а просто наблюдение. Ты молодец, что делишься.",
+        reply_markup=back_to_menu_kb
+    )
 
 async def main():
     db.init_db()
