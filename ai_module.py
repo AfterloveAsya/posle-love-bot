@@ -36,9 +36,51 @@ async def analyze_diary_entry(text: str) -> str:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"OpenRouter error {resp.status}: {error_text}")
-                    return f"❌ Ошибка API ({resp.status})"
+                    return "Не могу проанализировать запись, но я её сохранил."
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logging.error(f"AI analyze failed: {e}")
-        return "❌ Ошибка соединения"
+        return "Не могу проанализировать запись, но я её сохранил."
+
+async def expert_analysis(user_story: list) -> str:
+    context = "\n".join([f"• {item['q']}: {item['a']}" for item in user_story])
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": MODEL,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "Ты — опытный схема-терапевт. Проанализируй историю клиента после расставания. "
+                    "На основе ответов определи:\n"
+                    "1. Ведущий дезадаптивный режим (Карающий Родитель, Уязвимый Ребёнок, Сердитый Ребёнок, Избегающий Защитник и т.д.).\n"
+                    "2. Основной паттерн поведения (капитуляция, избегание, гиперкомпенсация).\n"
+                    "3. Точку ближайшего развития — что клиенту важно сделать в первую очередь.\n\n"
+                    "Напиши это бережно, понятным языком, без директив, с ясной структурой. "
+                    "Добавь короткое поддерживающее предложение."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"История клиента:\n{context}"
+            }
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=30) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logging.error(f"OpenRouter expert error {resp.status}: {error_text}")
+                    return "Не удалось провести экспертный анализ, но я сохраню твою историю."
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logging.error(f"Expert analysis failed: {e}")
+        return "Не удалось провести экспертный анализ, но я сохраню твою историю."

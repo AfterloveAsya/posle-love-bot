@@ -6,7 +6,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand, LabeledPrice, PreCheckoutQuery
 import db
 import ai_module
 import scheduler
@@ -22,7 +22,14 @@ dp = Dispatcher(storage=storage)
 class Diagnosis(StatesGroup):
     waiting_answer = State()
 
-# ===== КЛАВИАТУРЫ =====
+class OARS(StatesGroup):
+    waiting_situation = State()
+    waiting_emotion = State()
+    waiting_body = State()
+    waiting_thought = State()
+    waiting_behavior = State()
+    waiting_confirmation = State()
+
 main_menu_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📋 Задание", callback_data="task")],
@@ -57,7 +64,7 @@ diary_menu_kb = InlineKeyboardMarkup(
 settings_menu_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="⏰ Время рассылки", callback_data="settings_time")],
-        [InlineKeyboardButton(text="⚙️ Подписка", callback_data="subscribe")],
+        [InlineKeyboardButton(text="💎 Подписка", callback_data="subscribe")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
     ]
 )
@@ -80,7 +87,6 @@ library_menu_kb = InlineKeyboardMarkup(
     ]
 )
 
-# ===== БАЗА ЗАДАНИЙ =====
 TASKS = {
     "кризис": [
         "🌊 «Холодная вода»: Умойся ледяной водой или подержи запястья под холодной струёй 30 секунд. Это снижает тревогу через вегетативную нервную систему.",
@@ -105,84 +111,46 @@ TASKS = {
     ]
 }
 
-# ===== ВОПРОСЫ ДИАГНОСТИКИ =====
 DIAGNOSIS_QUESTIONS = [
     {
         "text": "Вопрос 1/7: Как часто за последнюю неделю ты чувствовал(а) сильную тревогу или панику?",
-        "options": [
-            ("Почти постоянно", 3),
-            ("Несколько раз в день", 2),
-            ("Пару раз за неделю", 1),
-            ("Не чувствовал(а)", 0)
-        ]
+        "options": [("Почти постоянно", 3), ("Несколько раз в день", 2), ("Пару раз за неделю", 1), ("Не чувствовал(а)", 0)]
     },
     {
         "text": "Вопрос 2/7: Бывает ли, что мысли о бывшем партнёре мешают тебе работать или спать?",
-        "options": [
-            ("Да, постоянно", 3),
-            ("Часто", 2),
-            ("Редко", 1),
-            ("Нет", 0)
-        ]
+        "options": [("Да, постоянно", 3), ("Часто", 2), ("Редко", 1), ("Нет", 0)]
     },
     {
         "text": "Вопрос 3/7: Хочется ли тебе написать или позвонить бывшему партнёру, несмотря на решение расстаться?",
-        "options": [
-            ("Очень сильно хочется", 3),
-            ("Иногда возникает желание", 2),
-            ("Скорее нет, чем да", 1),
-            ("Нет, не хочется", 0)
-        ]
+        "options": [("Очень сильно хочется", 3), ("Иногда возникает желание", 2), ("Скорее нет, чем да", 1), ("Нет, не хочется", 0)]
     },
     {
         "text": "Вопрос 4/7: Чувствуешь ли ты опустошённость или потерю интереса к тому, что раньше радовало?",
-        "options": [
-            ("Да, я ничего не хочу", 3),
-            ("Часто такое состояние", 2),
-            ("Иногда бывает", 1),
-            ("Я сохранил(а) интерес к жизни", 0)
-        ]
+        "options": [("Да, я ничего не хочу", 3), ("Часто такое состояние", 2), ("Иногда бывает", 1), ("Я сохранил(а) интерес к жизни", 0)]
     },
     {
         "text": "Вопрос 5/7: Как ты оцениваешь свою самокритику в последние дни?",
-        "options": [
-            ("Я постоянно виню себя во всём", 3),
-            ("Часто критикую себя", 2),
-            ("Иногда замечаю самокритику", 1),
-            ("Я отношусь к себе бережно", 0)
-        ]
+        "options": [("Я постоянно виню себя во всём", 3), ("Часто критикую себя", 2), ("Иногда замечаю самокритику", 1), ("Я отношусь к себе бережно", 0)]
     },
     {
         "text": "Вопрос 6/7: Есть ли у тебя хотя бы 1-2 человека, с кем ты можешь открыто поделиться своими переживаниями?",
-        "options": [
-            ("Нет, я совсем один(на)", 3),
-            ("Есть, но не уверен(а), что могу открыться", 2),
-            ("Есть один близкий человек", 1),
-            ("Да, у меня есть поддержка", 0)
-        ]
+        "options": [("Нет, я совсем один(на)", 3), ("Есть, но не уверен(а), что могу открыться", 2), ("Есть один близкий человек", 1), ("Да, у меня есть поддержка", 0)]
     },
     {
         "text": "Вопрос 7/7: Видишь ли ты для себя будущее через полгода-год, которое приносит хотя бы каплю надежды?",
-        "options": [
-            ("Я вообще не вижу будущего", 3),
-            ("Скорее нет, чем да", 2),
-            ("Есть проблески надежды", 1),
-            ("Да, я верю, что всё наладится", 0)
-        ]
+        "options": [("Я вообще не вижу будущего", 3), ("Скорее нет, чем да", 2), ("Есть проблески надежды", 1), ("Да, я верю, что всё наладится", 0)]
     }
 ]
 
 def calculate_state(total_score: int) -> str:
-    if total_score >= 15:
-        return "кризис"
-    elif total_score >= 7:
-        return "стабилизация"
-    else:
-        return "восстановление"
+    if total_score >= 15: return "кризис"
+    elif total_score >= 7: return "стабилизация"
+    else: return "восстановление"
 
-# ===== КОМАНДЫ =====
+# ===== START =====
 @dp.message(Command("start"))
-async def cmd_start(message: types.Message):
+async def cmd_start(message: types.Message, state: FSMContext):
+    await state.clear()
     user_name = message.from_user.first_name or "Дорогой друг"
     welcome_text = (
         f"🌿 Привет, {user_name}!\n\n"
@@ -215,35 +183,19 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
         db.save_diagnosis(message.chat.id, user_state, total)
 
         result_texts = {
-            "кризис": (
-                "🔴 Твой результат: кризисное состояние.\n\n"
-                "Сейчас тебе особенно тяжело. Это нормально — испытывать такую боль после расставания. "
-                "В ближайшие дни я буду присылать тебе щадящие техники заземления. Помни: это пройдёт."
-            ),
-            "стабилизация": (
-                "🟡 Твой результат: стабилизация.\n\n"
-                "Ты уже начал(а) справляться, но боль ещё возвращается. "
-                "Мы будем работать над укреплением внутренней опоры."
-            ),
-            "восстановление": (
-                "🟢 Твой результат: восстановление.\n\n"
-                "Ты прошёл(а) самый сложный этап. Ресурсы для роста уже есть. "
-                "Я помогу тебе углубить понимание себя и вернуть радость жизни."
-            )
+            "кризис": "🔴 Твой результат: кризисное состояние.\n\nСейчас тебе особенно тяжело. Это нормально — испытывать такую боль после расставания. В ближайшие дни я буду присылать тебе щадящие техники заземления. Помни: это пройдёт.",
+            "стабилизация": "🟡 Твой результат: стабилизация.\n\nТы уже начал(а) справляться, но боль ещё возвращается. Мы будем работать над укреплением внутренней опоры.",
+            "восстановление": "🟢 Твой результат: восстановление.\n\nТы прошёл(а) самый сложный этап. Ресурсы для роста уже есть. Я помогу тебе углубить понимание себя."
         }
 
         await message.answer(
-            result_texts[user_state] + "\n\nНажми «В главное меню», чтобы начать.",
-            reply_markup=back_to_menu_kb
+            result_texts[user_state] + "\n\nА теперь давай поговорим. Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
         )
-        await state.clear()
+        await state.set_state(OARS.waiting_situation)
         return
 
     question = DIAGNOSIS_QUESTIONS[index]
-    buttons = [
-        [InlineKeyboardButton(text=opt[0], callback_data=f"diag_answer_{i}")]
-        for i, opt in enumerate(question["options"])
-    ]
+    buttons = [[InlineKeyboardButton(text=opt[0], callback_data=f"diag_answer_{i}")] for i, opt in enumerate(question["options"])]
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
 
     if is_new_message:
@@ -262,18 +214,67 @@ async def process_diag_answer(callback: types.CallbackQuery, state: FSMContext):
     await callback.answer()
     await ask_next_question(callback.message, state)
 
+# ===== OARS DIALOG =====
+@dp.message(OARS.waiting_situation)
+async def process_situation(message: types.Message, state: FSMContext):
+    db.save_user_answer(message.from_user.id, "Ситуация", message.text)
+    await message.answer("Какое чувство сейчас самое сильное?")
+    await state.set_state(OARS.waiting_emotion)
+
+@dp.message(OARS.waiting_emotion)
+async def process_emotion(message: types.Message, state: FSMContext):
+    db.save_user_answer(message.from_user.id, "Эмоции", message.text)
+    await message.answer("Где в теле ты ощущаешь эту эмоцию? (например, ком в горле, тяжесть в груди)")
+    await state.set_state(OARS.waiting_body)
+
+@dp.message(OARS.waiting_body)
+async def process_body(message: types.Message, state: FSMContext):
+    db.save_user_answer(message.from_user.id, "Тело", message.text)
+    await message.answer("Какая мысль крутится у тебя в голове чаще всего?")
+    await state.set_state(OARS.waiting_thought)
+
+@dp.message(OARS.waiting_thought)
+async def process_thought(message: types.Message, state: FSMContext):
+    db.save_user_answer(message.from_user.id, "Мысли", message.text)
+    await message.answer("Что ты делаешь, когда становится совсем тяжело? (например, залипаешь в соцсетях, ешь, плачешь)")
+    await state.set_state(OARS.waiting_behavior)
+
+@dp.message(OARS.waiting_behavior)
+async def process_behavior(message: types.Message, state: FSMContext):
+    db.save_user_answer(message.from_user.id, "Поведение", message.text)
+    story = db.get_user_story(message.from_user.id)
+    summary = "Вот что я услышал:\n"
+    for item in story:
+        summary += f"• {item['q']}: {item['a']}\n"
+    summary += "\nВсё верно? (напиши «да» или «нет», чтобы уточнить)"
+    await message.answer(summary)
+    await state.set_state(OARS.waiting_confirmation)
+
+@dp.message(OARS.waiting_confirmation)
+async def process_confirmation(message: types.Message, state: FSMContext):
+    if message.text.lower().startswith("да"):
+        await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
+        story = db.get_user_story(message.from_user.id)
+        analysis = await ai_module.expert_analysis(story)
+        await message.answer(analysis, reply_markup=main_menu_kb)
+        db.clear_user_story(message.from_user.id)
+        await state.clear()
+    else:
+        await message.answer("Давай уточним. Расскажи ещё раз подробнее, что случилось.")
+        await state.set_state(OARS.waiting_situation)
+
 @dp.message(Command("menu"))
-async def cmd_menu(message: types.Message):
+async def cmd_menu(message: types.Message, state: FSMContext):
+    await state.clear()
     await message.answer("Главное меню:", reply_markup=main_menu_kb)
 
-# ===== НАВИГАЦИЯ =====
 @dp.callback_query(F.data == "main_menu")
 async def back_to_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("Главное меню:", reply_markup=main_menu_kb)
     await callback.answer()
 
-# ===== ЗАДАНИЕ =====
+# ===== TASK =====
 @dp.callback_query(F.data == "task")
 async def show_task(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
@@ -284,168 +285,121 @@ async def show_task(callback: types.CallbackQuery):
         state = user_data["state"]
         tasks = TASKS.get(state, TASKS["стабилизация"])
         chosen = random.choice(tasks)
-        text = f"📋 **Твоё задание на сегодня:**\n\n{chosen}"
-        await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+        await callback.message.edit_text(f"📋 **Твоё задание на сегодня:**\n\n{chosen}", reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
-# ===== ДНЕВНИК =====
+# ===== DIARY =====
 @dp.callback_query(F.data == "diary_menu")
 async def diary_menu(callback: types.CallbackQuery):
-    text = "📓 **Дневник рефлексии**\n\nНапиши мне сообщение, и я проанализирую его через AI. Или посмотри свои прошлые записи."
-    await callback.message.edit_text(text, reply_markup=diary_menu_kb, parse_mode="Markdown")
+    await callback.message.edit_text("📓 **Дневник рефлексии**\n\nНапиши мне сообщение, и я проанализирую его через AI. Или посмотри свои прошлые записи.", reply_markup=diary_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "diary_write")
 async def diary_write(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "✏️ Напиши мне сообщение — я проанализирую его и сохраню.",
-        reply_markup=back_to_menu_kb
-    )
+    await callback.message.edit_text("✏️ Напиши мне сообщение — я проанализирую его и сохраню.", reply_markup=back_to_menu_kb)
     await callback.answer()
 
 @dp.callback_query(F.data == "diary_history")
 async def diary_history(callback: types.CallbackQuery):
-    entries = db.get_diary_entries(callback.from_user.id)
+    entries = db.get_last_entries(callback.from_user.id)
     if not entries:
         text = "У тебя пока нет записей. Напиши что-нибудь в дневник!"
     else:
         lines = []
         for i, e in enumerate(entries, 1):
-            date = e["created_at"][:10]
-            preview = e["text"][:80] + "..." if len(e["text"]) > 80 else e["text"]
+            date = e["timestamp"][:10]
+            preview = e["entry"][:80] + "..." if len(e["entry"]) > 80 else e["entry"]
             lines.append(f"**{i}. {date}**\n{preview}")
         text = "📖 **Мои записи:**\n\n" + "\n\n".join(lines)
     await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
-# ===== МОЁ СОСТОЯНИЕ + ПРОГРЕСС =====
+# ===== MY STATE =====
 @dp.callback_query(F.data == "my_state")
 async def show_my_state(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
     if user_data is None:
-        text = "Ты ещё не проходил(а) диагностику. Начать?",
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")],
-                [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-            ]
-        )
-        await callback.message.edit_text(text[0], reply_markup=kb)
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ])
+        await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=kb)
     else:
         state_emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
         state_name = user_data["state"]
-        score = user_data["score"]
+        total = user_data["score"]
         updated = user_data["updated_at"][:10]
-
-        total = score
         level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
-
         progress_bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
-
+        premium = "⭐ Premium" if user_data.get("is_premium") else "—"
         text = (
             f"{state_emoji.get(state_name, '')} **Твоё состояние:** {level}\n\n"
-            f"`{progress_bar}`\n"
-            f"Баллов: {total}/21\n"
-            f"Последняя диагностика: {updated}\n\n"
+            f"`{progress_bar}`\nБаллов: {total}/21\n"
+            f"Последняя диагностика: {updated}\n"
+            f"Статус: {premium}\n\n"
             "Можешь пройти диагностику заново в любой момент."
         )
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
-                [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-            ]
-        )
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ])
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
-# ===== БИБЛИОТЕКА ТЕХНИК =====
+# ===== LIBRARY =====
 @dp.callback_query(F.data == "library")
 async def library_menu(callback: types.CallbackQuery):
-    text = "📚 **Библиотека техник**\n\nВыбери тему:"
-    await callback.message.edit_text(text, reply_markup=library_menu_kb, parse_mode="Markdown")
+    await callback.message.edit_text("📚 **Библиотека техник**\n\nВыбери тему:", reply_markup=library_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "lib_child")
 async def lib_child(callback: types.CallbackQuery):
-    text = (
-        "🧸 **Внутренний Ребёнок**\n\n"
-        "В схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит "
-        "детские боли и потребности.\n\n"
-        "**Как работать:**\n"
-        "• Представь себя в детстве. Что бы ты хотел(а) услышать?\n"
-        "• Напиши письмо себе-ребёнку со словами поддержки\n"
-        "• Положи руку на сердце и скажи: «Я с тобой»\n\n"
-        "Практика: закрой глаза, вспомни себя в 5-7 лет. Что на тебе надето? "
-        "Что ты чувствуешь? Мысленно обними этого ребёнка."
+    await callback.message.edit_text(
+        "🧸 **Внутренний Ребёнок**\n\nВ схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит детские боли.\n\n**Как работать:**\n• Представь себя в детстве. Что бы ты хотел(а) услышать?\n• Напиши письмо себе-ребёнку со словами поддержки\n• Положи руку на сердце и скажи: «Я с тобой»\n\nПрактика: закрой глаза, вспомни себя в 5-7 лет. Мысленно обними этого ребёнка.",
+        reply_markup=back_to_menu_kb
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb)
     await callback.answer()
 
 @dp.callback_query(F.data == "lib_ground")
 async def lib_ground(callback: types.CallbackQuery):
-    text = (
-        "🧘 **Заземление**\n\n"
-        "Техники, которые возвращают в «здесь и сейчас» при тревоге:\n\n"
-        "**5-4-3-2-1:** Назови 5 вещей, которые видишь, 4 — которые можешь потрогать, "
-        "3 — слышишь, 2 — запаха, 1 — вкус.\n\n"
-        "**Квадратное дыхание:** Вдох на 4 счёта, задержка на 4, выдох на 4, задержка на 4.\n\n"
-        "**Холодная вода:** Умойся или подержи запястья под холодной водой 30 секунд.\n\n"
-        "**Фиксация взгляда:** Выбери предмет и рассматривай его 2 минуты, "
-        "замечая каждую деталь."
+    await callback.message.edit_text(
+        "🧘 **Заземление**\n\nТехники, которые возвращают в «здесь и сейчас» при тревоге:\n\n**5-4-3-2-1:** Назови 5 вещей, 4 — потрогать, 3 — услышать, 2 — запаха, 1 — вкус.\n\n**Квадратное дыхание:** Вдох на 4 — задержка на 4 — выдох на 4 — задержка на 4.\n\n**Холодная вода:** Умойся или подержи запястья под холодной водой 30 сек.\n\n**Фиксация взгляда:** Рассматривай предмет 2 минуты, замечая детали.",
+        reply_markup=back_to_menu_kb
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb)
     await callback.answer()
 
 @dp.callback_query(F.data == "lib_thoughts")
 async def lib_thoughts(callback: types.CallbackQuery):
-    text = (
-        "💭 **Работа с мыслями и чувствами**\n\n"
-        "**Дневник мыслей:** Записывай ситуацию → мысль → эмоцию → реакцию. "
-        "Это поможет заметить повторяющиеся паттерны.\n\n"
-        "**Письмо без отправки:** Напиши человеку всё, что чувствуешь. "
-        "Не отправляй. Просто дай выход эмоциям.\n\n"
-        "**Смена перспективы:** Спроси себя: «Что бы я сказал(а) другу "
-        "в такой ситуации?» Отнесись к себе так же бережно.\n\n"
-        "**Аффирмации:** «Я имею право на свои чувства», «Я ценен/ценна сам(а) по себе», "
-        "«Это чувство временно»."
+    await callback.message.edit_text(
+        "💭 **Работа с мыслями и чувствами**\n\n**Дневник мыслей:** Записывай ситуацию → мысль → эмоцию → реакцию.\n\n**Письмо без отправки:** Напиши человеку всё, что чувствуешь. Не отправляй.\n\n**Смена перспективы:** «Что бы я сказал(а) другу в такой ситуации?»\n\n**Аффирмации:** «Я имею право на свои чувства», «Я ценен/ценна сам(а) по себе».",
+        reply_markup=back_to_menu_kb
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb)
     await callback.answer()
 
-# ===== КРИЗИСНАЯ ПОМОЩЬ =====
+# ===== CRISIS =====
 @dp.callback_query(F.data == "crisis")
 async def crisis_help(callback: types.CallbackQuery):
-    text = (
-        "🆘 **Экстренная помощь**\n\n"
-        "Сделай прямо сейчас:\n"
-        "1. Умойся холодной водой или подержи руки под холодной водой.\n"
-        "2. Сделай 5 глубоких вдохов (вдох на 4 счёта, выдох на 6).\n"
-        "3. Повторяй: «Я в безопасности. Это чувство пройдёт».\n\n"
-        "📞 **Телефоны доверия (Россия):**\n"
-        "• 8 (800) 333-44-34\n"
-        "• 8 (800) 2000-122 (для детей и подростков)\n"
-        "• 112 — экстренная служба\n\n"
-        "Пожалуйста, обратись к специалисту, если чувствуешь, что не справляешься."
+    await callback.message.edit_text(
+        "🆘 **Экстренная помощь**\n\nСделай прямо сейчас:\n1. Умойся холодной водой или подержи руки под холодной водой.\n2. Сделай 5 глубоких вдохов (вдох на 4 счёта, выдох на 6).\n3. Повторяй: «Я в безопасности. Это чувство пройдёт».\n\n📞 **Телефоны доверия (Россия):**\n• 8 (800) 333-44-34\n• 8 (800) 2000-122\n• 112 — экстренная служба",
+        reply_markup=back_to_menu_kb, parse_mode="Markdown"
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
-# ===== НАСТРОЙКИ =====
+# ===== SETTINGS =====
 @dp.callback_query(F.data == "settings")
 async def settings_menu(callback: types.CallbackQuery):
-    text = "⚙️ **Настройки**\n\nВыбери раздел:"
-    await callback.message.edit_text(text, reply_markup=settings_menu_kb, parse_mode="Markdown")
+    await callback.message.edit_text("⚙️ **Настройки**\n\nВыбери раздел:", reply_markup=settings_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "settings_time")
 async def settings_time(callback: types.CallbackQuery):
-    settings = db.get_settings(callback.from_user.id)
-    text = (
-        f"⏰ **Время рассылки**\n\n"
-        f"Сейчас: утро **{settings['morning_hour']}:00 UTC** / вечер **{settings['evening_hour']}:00 UTC**\n"
-        f"(МСК: утро **{settings['morning_hour'] + 3}:00** / вечер **{settings['evening_hour'] + 3}:00**)\n\n"
-        "Выбери новое время:"
-    )
+    user_data = db.get_user_state(callback.from_user.id)
+    mh = 6
+    eh = 18
+    if user_data and "morning_hour" in user_data:
+        mh = user_data["morning_hour"]
+        eh = user_data["evening_hour"]
+    text = f"⏰ **Время рассылки**\n\nСейчас: утро **{mh}:00 UTC** ({mh+3}:00 МСК) / вечер **{eh}:00 UTC** ({eh+3}:00 МСК)\n\nВыбери новое время:"
     await callback.message.edit_text(text, reply_markup=time_settings_kb, parse_mode="Markdown")
     await callback.answer()
 
@@ -454,46 +408,58 @@ async def set_time(callback: types.CallbackQuery):
     parts = callback.data.split("_")
     morning = int(parts[1])
     evening = int(parts[2])
-    db.save_settings(callback.from_user.id, morning, evening)
+    db.set_user_time(callback.from_user.id, morning, evening)
     await callback.message.edit_text(
-        f"✅ Время сохранено!\n\n"
-        f"Утро: **{morning}:00 UTC** ({morning + 3}:00 МСК)\n"
-        f"Вечер: **{evening}:00 UTC** ({evening + 3}:00 МСК)",
-        reply_markup=settings_menu_kb,
-        parse_mode="Markdown"
+        f"✅ Время сохранено!\n\nУтро: **{morning}:00 UTC** ({morning+3}:00 МСК)\nВечер: **{evening}:00 UTC** ({evening+3}:00 МСК)",
+        reply_markup=settings_menu_kb, parse_mode="Markdown"
     )
     await callback.answer()
 
+# ===== SUBSCRIBE / PAYMENT =====
 @dp.callback_query(F.data == "subscribe")
 async def subscribe_info(callback: types.CallbackQuery):
-    text = (
-        "⚙️ **Подписка**\n\n"
-        "**Бесплатно:**\n"
-        "• Диагностика состояния\n"
-        "• Базовые техники и кризисная помощь\n"
-        "• AI-анализ дневника\n"
-        "• Утренние/вечерние напоминания\n\n"
-        "**Premium (скоро):**\n"
-        "• Персональные задания каждый день\n"
-        "• Расширенный AI-анализ\n"
-        "• Приоритетная поддержка\n\n"
-        "Сейчас весь функционал бесплатный."
+    if db.is_premium(callback.from_user.id):
+        await callback.message.edit_text("✅ У тебя активна Premium-подписка. Спасибо, что ты с нами!", reply_markup=back_to_menu_kb)
+        await callback.answer()
+        return
+
+    prices = [LabeledPrice(label="Годовая подписка Premium", amount=2990)]
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="Подписка «После любви»",
+        description="Premium-доступ: персональные задания, AI-анализ, настройка времени.",
+        payload="premium_subscription",
+        provider_token="",
+        currency="XTR",
+        prices=prices,
+        start_parameter="premium"
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
-# ===== AI-АНАЛИЗ ДНЕВНИКА =====
+@dp.pre_checkout_query()
+async def checkout_process(pre_checkout_query: PreCheckoutQuery):
+    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
+
+@dp.message(F.successful_payment)
+async def successful_payment(message: types.Message):
+    if message.successful_payment.invoice_payload == "premium_subscription":
+        amount = message.successful_payment.total_amount
+        days = 365 if amount == 2990 else 30
+        db.activate_premium(message.from_user.id, days)
+        await message.answer("🎉 Твоя Premium-подписка активирована! Теперь тебе доступны все возможности.", reply_markup=main_menu_kb)
+
+# ===== DIARY ENTRY (catch-all) =====
 @dp.message()
-async def diary_entry(message: types.Message):
+async def diary_entry(message: types.Message, state: FSMContext):
+    current_state = await state.get_state()
+    if current_state is not None:
+        return
     await bot.send_chat_action(message.chat.id, action="typing")
     analysis = await ai_module.analyze_diary_entry(message.text)
     db.save_diary_entry(message.from_user.id, message.text, analysis)
-    await message.answer(
-        analysis,
-        reply_markup=back_to_menu_kb
-    )
+    await message.answer(analysis, reply_markup=back_to_menu_kb)
 
-# ===== ЗАПУСК =====
+# ===== MAIN =====
 async def main():
     db.init_db()
     await bot.set_my_commands([
