@@ -320,7 +320,7 @@ async def diary_entry(message: types.Message):
     await bot.send_chat_action(message.chat.id, action="typing")
     analysis = await ai_module.analyze_diary_entry(message.text)
     await message.answer(
-        f"{analysis}\n\nЭто не оценка, а просто наблюдение. Ты молодец, что делишься.",
+        analysis,
         reply_markup=back_to_menu_kb
     )
 
