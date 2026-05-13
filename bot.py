@@ -9,6 +9,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import db
 import ai_module
+import scheduler
 
 # ===== НАСТРОЙКИ =====
 BOT_TOKEN = "8746574885:AAEjgDVRSdmv9M_gdgDiH32Ax9RALfiGI0A"
@@ -330,6 +331,7 @@ async def main():
         BotCommand(command="start", description="Начать сначала"),
         BotCommand(command="menu", description="Главное меню")
     ])
+    asyncio.create_task(scheduler.scheduled_task(bot))
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
