@@ -1,13 +1,12 @@
 import asyncio
 import logging
+import random
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
-from datetime import datetime
-
 import db
 
 # ===== НАСТРОЙКИ =====
@@ -45,6 +44,30 @@ start_diagnosis_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")]
     ]
 )
+
+TASKS = {
+    "кризис": [
+        "🌊 «Холодная вода»: Умойся ледяной водой или подержи запястья под холодной струёй 30 секунд. Это снижает тревогу через вегетативную нервную систему.",
+        "🌳 «5-4-3-2-1»: Назови 5 вещей, которые видишь, 4 — которые можешь потрогать, 3 — слышишь, 2 — запаха, 1 — вкус. Возвращает в настоящий момент.",
+        "💨 «Квадратное дыхание»: Вдох на 4 счёта, задержка на 4, выдох на 4, задержка на 4. Повтори 3-5 раз.",
+        "📝 «Выплеск эмоций»: Возьми бумагу и пиши всё, что приходит в голову — гнев, боль, страх. Не оценивай. Потом можно порвать.",
+        "🧸 «Внутренний Ребёнок»: Положи руку на сердце и скажи себе: «Я с тобой. Тебе больно, но ты не один. Я выдержу»."
+    ],
+    "стабилизация": [
+        "📖 «Письмо без отправки»: Напиши бывшему партнёру всё, что чувствуешь. Не отправляй. Сохрани или удали.",
+        "🌼 «Маленькая радость»: Запланируй сегодня что-то приятное для себя (чашка любимого чая, фильм, прогулка). Сделай это осознанно.",
+        "🧘 «Сканирование тела»: Закрой глаза и мысленно пройди вниманием от макушки до пяток, замечая напряжение. Мягко расслабляй каждую зону.",
+        "💬 «Аффирмация дня»: Повтори 5 раз: «Я имею право на свои чувства. Я постепенно исцеляюсь. Я ценен/ценна сам(а) по себе».",
+        "🌙 «Вечерняя благодарность»: Перед сном вспомни 3 вещи, за которые ты благодарен/на сегодня (даже мелочи). Запиши."
+    ],
+    "восстановление": [
+        "🎨 «Моё будущее»: Нарисуй или опиши, каким ты видишь своё идеальное утро через год. Какие детали? Кто рядом? Что ты чувствуешь?",
+        "🌟 «Сильные стороны»: Напиши 5 своих качеств, которые помогли тебе пережить трудности. Это твоя опора.",
+        "📚 «Письмо Внутреннему Ребёнку»: Напиши себе-маленькому слова поддержки и заботы. Что бы ты хотел(а) услышать в детстве?",
+        "🔄 «Новый ритуал»: Придумай новое маленькое действие, которое будет символом твоей новой главы (например, заваривать особый чай по утрам).",
+        "💎 «Уроки опыта»: Подумай, что важного ты узнал(а) о себе благодаря этим отношениям. Запиши, без осуждения."
+    ]
+}
 
 DIAGNOSIS_QUESTIONS = [
     {
@@ -152,7 +175,6 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
     if index >= len(DIAGNOSIS_QUESTIONS):
         total = data.get("total_score", 0)
         user_state = calculate_state(total)
-
         db.save_diagnosis(message.chat.id, user_state, total)
 
         result_texts = {
@@ -235,18 +257,16 @@ async def show_my_state(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "task")
 async def show_task(callback: types.CallbackQuery):
-    text = (
-        "📋 Твоё задание на сегодня:\n\n"
-        "«Заземление через 5 чувств»\n\n"
-        "Найди вокруг себя и мысленно назови:\n"
-        "5 вещей, которые ты видишь,\n"
-        "4 вещи, которые ты можешь потрогать,\n"
-        "3 звука, которые ты слышишь,\n"
-        "2 запаха, которые ты ощущаешь,\n"
-        "1 вкус.\n\n"
-        "Это поможет вернуться в «здесь и сейчас»."
-    )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb)
+    user_data = db.get_user_state(callback.from_user.id)
+    if user_data is None:
+        text = "Сначала пройди диагностику, чтобы я мог подобрать задание под твоё состояние. Нажми /start."
+        await callback.message.edit_text(text, reply_markup=back_to_menu_kb)
+    else:
+        state = user_data["state"]
+        tasks = TASKS.get(state, TASKS["стабилизация"])
+        chosen = random.choice(tasks)
+        text = f"📋 **Твоё задание на сегодня:**\n\n{chosen}\n\nВозвращайся завтра за новым заданием!"
+        await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "diary")
