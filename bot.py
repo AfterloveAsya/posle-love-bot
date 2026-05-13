@@ -1,11 +1,14 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
+from datetime import datetime
+
+import db
 
 # ===== НАСТРОЙКИ =====
 BOT_TOKEN = "8746574885:AAEjgDVRSdmv9M_gdgDiH32Ax9RALfiGI0A"
@@ -24,6 +27,7 @@ main_menu_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📋 Сегодняшнее задание", callback_data="task")],
         [InlineKeyboardButton(text="📓 Дневник", callback_data="diary")],
+        [InlineKeyboardButton(text="📊 Моё состояние", callback_data="my_state")],
         [InlineKeyboardButton(text="📚 Библиотека техник", callback_data="library")],
         [InlineKeyboardButton(text="🆘 Кризисная помощь", callback_data="crisis")],
         [InlineKeyboardButton(text="⚙️ Подписка", callback_data="subscribe")]
@@ -149,6 +153,8 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
         total = data.get("total_score", 0)
         user_state = calculate_state(total)
 
+        db.save_diagnosis(message.chat.id, user_state, total)
+
         result_texts = {
             "кризис": (
                 "🔴 Твой результат: кризисное состояние.\n\n"
@@ -192,10 +198,8 @@ async def process_diag_answer(callback: types.CallbackQuery, state: FSMContext):
     answer_index = int(callback.data.split("_")[-1])
     data = await state.get_data()
     question_index = data.get("question_index", 0)
-
     score = DIAGNOSIS_QUESTIONS[question_index]["options"][answer_index][1]
     new_total = data.get("total_score", 0) + score
-
     await state.update_data(total_score=new_total, question_index=question_index + 1)
     await callback.answer()
     await ask_next_question(callback.message, state)
@@ -208,6 +212,25 @@ async def cmd_menu(message: types.Message):
 async def back_to_menu(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("Главное меню:", reply_markup=main_menu_kb)
+    await callback.answer()
+
+@dp.callback_query(F.data == "my_state")
+async def show_my_state(callback: types.CallbackQuery):
+    user_data = db.get_user_state(callback.from_user.id)
+    if user_data is None:
+        text = "Ты ещё не проходил(а) диагностику. Нажми /start, чтобы начать."
+    else:
+        state_emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
+        state_name = user_data["state"]
+        score = user_data["score"]
+        updated = user_data["updated_at"][:10]
+        text = (
+            f"{state_emoji.get(state_name, '')} Твоё состояние: **{state_name.capitalize()}**\n\n"
+            f"Баллов: {score} (из 21)\n"
+            f"Последняя диагностика: {updated}\n\n"
+            "Ты можешь пройти диагностику заново в любой момент — просто нажми /start."
+        )
+    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 @dp.callback_query(F.data == "task")
@@ -276,6 +299,7 @@ async def diary_entry(message: types.Message):
     await message.answer("Запись сохранена. Спасибо, что поделился. 💙", reply_markup=back_to_menu_kb)
 
 async def main():
+    db.init_db()
     await bot.set_my_commands([
         BotCommand(command="start", description="Начать сначала"),
         BotCommand(command="menu", description="Главное меню")
