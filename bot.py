@@ -317,11 +317,10 @@ async def subscribe_info(callback: types.CallbackQuery):
 
 @dp.message()
 async def diary_entry(message: types.Message):
-    await message.answer("Секунду, анализирую твою запись...")
+    await bot.send_chat_action(message.chat.id, action="typing")
     analysis = await ai_module.analyze_diary_entry(message.text)
     await message.answer(
-        f"📓 Вот что я заметил в твоей записи:\n\n{analysis}\n\n"
-        "Это не оценка, а просто наблюдение. Ты молодец, что делишься.",
+        f"{analysis}\n\nЭто не оценка, а просто наблюдение. Ты молодец, что делишься.",
         reply_markup=back_to_menu_kb
     )
 

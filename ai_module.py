@@ -4,7 +4,7 @@ import os
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "openrouter/free"
+MODEL = "deepseek/deepseek-r1:free"
 
 async def analyze_diary_entry(text: str) -> str:
     headers = {
@@ -40,9 +40,9 @@ async def analyze_diary_entry(text: str) -> str:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"OpenRouter error {resp.status}: {error_text}")
-                    return "Пока не могу проанализировать запись, но я её сохранил."
+                    return f"❌ Ошибка API ({resp.status}): {error_text[:200]}"
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"].strip()
     except Exception as e:
         logging.error(f"AI analyze failed: {e}")
-        return "Пока не могу проанализировать запись, но я её сохранил."
+        return f"❌ Ошибка соединения: {e}"
