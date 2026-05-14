@@ -6,7 +6,7 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand, LabeledPrice, PreCheckoutQuery
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BotCommand
 import db
 import ai_module
 import scheduler
@@ -416,13 +416,7 @@ async def set_time(callback: types.CallbackQuery):
     await callback.answer()
 
 # ===== SUBSCRIBE / PAYMENT =====
-subscribe_kb = InlineKeyboardMarkup(
-    inline_keyboard=[
-        [InlineKeyboardButton(text="⭐ Годовая — 2990 Stars", callback_data="pay_annual")],
-        [InlineKeyboardButton(text="⭐ Месячная — 499 Stars", callback_data="pay_monthly")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="settings")]
-    ]
-)
+ADMIN_ID = 6433905414
 
 @dp.callback_query(F.data == "subscribe")
 async def subscribe_info(callback: types.CallbackQuery):
@@ -430,50 +424,51 @@ async def subscribe_info(callback: types.CallbackQuery):
         await callback.message.edit_text("✅ У тебя активна Premium-подписка. Спасибо, что ты с нами!", reply_markup=back_to_menu_kb)
         await callback.answer()
         return
-    await callback.message.edit_text("💎 **Premium-подписка**\n\nВыбери тариф:", reply_markup=subscribe_kb, parse_mode="Markdown")
+
+    pay_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить 499₽ (месяц)", url="https://business.tbank.ru/invoices/api/v1/public/document/U4wLoZ06ajfAeZIUBIZAzRIZjpzy70Njj3tSyayZjNnN6WfIa2?nonce=XoBRhbT4")],
+            [InlineKeyboardButton(text="💳 Оплатить 2990₽ (год)", url="ССЫЛКА_НА_ГОДОВОЙ_СЧЁТ")],
+            [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data="confirm_payment")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+        ]
+    )
+    text = (
+        "⚙️ Premium-подписка\n\n"
+        "• Персональные задания каждый день\n"
+        "• AI-анализ дневника\n"
+        "• Утренние и вечерние сообщения\n\n"
+        "После оплаты нажми «Я оплатил», и мы активируем твой доступ."
+    )
+    await callback.message.edit_text(text, reply_markup=pay_kb)
     await callback.answer()
 
-@dp.callback_query(F.data == "pay_annual")
-async def pay_annual(callback: types.CallbackQuery):
-    prices = [LabeledPrice(label="Годовая Premium", amount=2990)]
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="Подписка «После любви»",
-        description="Premium на год: персональные задания, AI-анализ, настройка времени.",
-        payload="premium_annual",
-        provider_token="",
-        currency="XTR",
-        prices=prices
+@dp.callback_query(F.data == "confirm_payment")
+async def confirm_payment(callback: types.CallbackQuery):
+    user = callback.from_user
+    await callback.message.edit_text("Спасибо! Твоя оплата проверяется. Мы активируем подписку в ближайшее время.", reply_markup=back_to_menu_kb)
+    await bot.send_message(
+        chat_id=ADMIN_ID,
+        text=f"🔔 Пользователь @{user.username or 'нет username'} (ID: {user.id}) оплатил подписку. Проверьте и активируйте командой:\n`/activate {user.id}`",
+        parse_mode="Markdown"
     )
     await callback.answer()
 
-@dp.callback_query(F.data == "pay_monthly")
-async def pay_monthly(callback: types.CallbackQuery):
-    prices = [LabeledPrice(label="Месячная Premium", amount=499)]
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="Подписка «После любви»",
-        description="Premium на месяц: персональные задания, AI-анализ, настройка времени.",
-        payload="premium_monthly",
-        provider_token="",
-        currency="XTR",
-        prices=prices
-    )
-    await callback.answer()
-
-@dp.pre_checkout_query()
-async def checkout_process(pre_checkout_query: PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-@dp.message(F.successful_payment)
-async def successful_payment(message: types.Message):
-    payload = message.successful_payment.invoice_payload
-    if payload == "premium_annual":
-        db.activate_premium(message.from_user.id, 365)
-        await message.answer("🎉 Годовая Premium активирована! Спасибо за доверие.", reply_markup=main_menu_kb)
-    elif payload == "premium_monthly":
-        db.activate_premium(message.from_user.id, 30)
-        await message.answer("🎉 Месячная Premium активирована! Все возможности доступны.", reply_markup=main_menu_kb)
+@dp.message(Command("activate"))
+async def cmd_activate(message: types.Message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    try:
+        parts = message.text.split()
+        user_id = int(parts[1])
+        days = 30
+        if len(parts) > 2:
+            days = int(parts[2])
+        db.activate_premium(user_id, days)
+        await message.answer(f"✅ Premium активирован для пользователя {user_id} на {days} дней.")
+        await bot.send_message(user_id, "🎉 Твоя Premium-подписка активирована! Все возможности теперь доступны.", reply_markup=main_menu_kb)
+    except:
+        await message.answer("Использование: /activate user_id [days]")
 
 # ===== DIARY ENTRY (catch-all) =====
 @dp.message()
