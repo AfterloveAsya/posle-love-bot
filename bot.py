@@ -428,7 +428,7 @@ async def subscribe_info(callback: types.CallbackQuery):
     pay_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="💳 Оплатить 499₽ (месяц)", url="https://business.tbank.ru/invoices/api/v1/public/document/U4wLoZ06ajfAeZIUBIZAzRIZjpzy70Njj3tSyayZjNnN6WfIa2?nonce=XoBRhbT4")],
-            [InlineKeyboardButton(text="💳 Оплатить 2990₽ (год)", url="ССЫЛКА_НА_ГОДОВОЙ_СЧЁТ")],
+            [InlineKeyboardButton(text="💳 Оплатить 2990₽ (год)", url="https://b2b.cbrpay.ru/BS1B000S6GJK30P18TFPD4AC31QUTHUU")],
             [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data="confirm_payment")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
         ]
