@@ -633,7 +633,7 @@ async def schema_menu(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("lib_schema_det"))
+@dp.callback_query(F.data == "lib_schema_det")
 async def schema_det(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["det"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
@@ -649,7 +649,7 @@ async def schema_det(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("lib_schema_cop"))
+@dp.callback_query(F.data == "lib_schema_cop")
 async def schema_cop(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["cop"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
@@ -665,7 +665,7 @@ async def schema_cop(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("lib_schema_health"))
+@dp.callback_query(F.data == "lib_schema_health")
 async def schema_health(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["health"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
