@@ -541,58 +541,6 @@ async def cmd_activate(message: types.Message):
 
 # ===== LIBRARY =====
 LIBRARY = {
-    "Внутренний Ребёнок": (
-        "В схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит детские боли, "
-        "одиночество и потребность в заботе. Он активируется, когда мы чувствуем себя покинутыми.\n\n"
-        "🧸 **Как работать:**\n"
-        "• Представь себя в детстве. Что бы ты хотел(а) услышать?\n"
-        "• Напиши письмо себе-ребёнку со словами поддержки\n"
-        "• Положи руку на сердце и скажи: «Я с тобой»\n\n"
-        "📌 **Практика:** закрой глаза, вспомни себя в 5-7 лет. Мысленно обними этого ребёнка."
-    ),
-    "Карающий Родитель": (
-        "Внутренний критик, который ругает за ошибки, стыдит и не даёт покоя. "
-        "Часто это интроецированный голос значимого взрослого из детства.\n\n"
-        "🎯 **Техника:**\n"
-        "• Заметь его голос и скажи «Стоп»\n"
-        "• Дай ему смешное имя (например, «Ворчун»)\n"
-        "• Ответь ему с позиции взрослого: «Я делаю всё, что могу»\n\n"
-        "📌 **Вопрос себе:** Чей это голос на самом деле? Что бы я сказал(а) другу в такой ситуации?"
-    ),
-    "Отстранённый Защитник": (
-        "Режим, в котором мы отключаемся от эмоций, чтобы не чувствовать боль. "
-        "Проявляется как избегание, диссоциация, уход в фантазии или интеллектуализацию.\n\n"
-        "🔍 **Признаки:**\n"
-        "• «Мне всё равно»\n"
-        "• Я просто наблюдаю со стороны\n"
-        "• Эмоции кажутся нереальными\n\n"
-        "🧘 **Как вернуться в тело:**\n"
-        "• Техники заземления (5-4-3-2-1)\n"
-        "• Заметь: «Я сейчас отстраняюсь. Это защита»\n"
-        "• Медленное дыхание с акцентом на выдох"
-    ),
-    "Агрессивный Защитник": (
-        "Режим, в котором мы нападаем, чтобы защититься от уязвимости. "
-        "Проявляется как гнев, критика других, контроль, импульсивность.\n\n"
-        "🔥 **Признаки:**\n"
-        "• Вспышки гнева\n"
-        "• Желание контролировать\n"
-        "• Обесценивание других\n\n"
-        "💡 **Что делать:**\n"
-        "• Пауза: посчитай до 10, прежде чем реагировать\n"
-        "• Спроси себя: «Что я на самом деле сейчас чувствую?»\n"
-        "• Направь энергию в движение (физическая активность)"
-    ),
-    "Здоровый Взрослый": (
-        "Целевой режим — часть нас, которая способна заботиться, устанавливать границы, "
-        "принимать решения и быть в контакте с реальностью.\n\n"
-        "🌟 **Как укреплять:**\n"
-        "• Регулярная самоподдержка: «Я справлюсь»\n"
-        "• Забота о своих потребностях (сон, еда, отдых)\n"
-        "• Установление здоровых границ\n"
-        "• Признание своих чувств без осуждения\n\n"
-        "📌 **Практика:** Каждый вечер записывай 1 решение, которое ты принял(а) как взрослый человек."
-    ),
     "Заземление": (
         "Техники, которые возвращают в «здесь и сейчас» при тревоге:\n\n"
         "🌳 **5-4-3-2-1:** Назови 5 вещей, 4 — потрогать, 3 — услышать, 2 — запаха, 1 — вкус.\n\n"
@@ -618,14 +566,137 @@ LIBRARY = {
     ),
 }
 
+SCHEMA_CATEGORIES = {
+    "det": {
+        "emoji": "🔹",
+        "title": "Детские и уязвимые режимы (раненые части)",
+        "modes": {
+            "Уязвимый ребёнок": "напуганный, покинутый, жаждущий любви и принятия. Чувствует себя никому не нужным, плачет, обижается, боится отвержения и одиночества.",
+            "Режим «Жертва»": "ощущение беспомощности, бессилия перед обстоятельствами. Человек верит, что от него ничего не зависит, и пассивно страдает.",
+        }
+    },
+    "cop": {
+        "emoji": "🔹",
+        "title": "Дезадаптивные копинг-режимы (защитные механизмы, которые вредят)",
+        "modes": {
+            "Разгневанный защитник": "агрессивная, контролирующая часть. Нападает на других (кричит, обвиняет, ставит ультиматумы) или защищается через злость, когда границы нарушены.",
+            "Отстранённый защитник": "убегает от боли через алкоголь, наркотики, азартные игры, порно, онанизм, залипание в сериалах или соцсетях. Отключает чувства, но не решает проблему.",
+            "Режим «Спасатель»": "бросается решать чужие проблемы, жертвует собой, помогает даже в ущерб себе. Делает это из тревоги и страха быть ненужным (в отличие от здоровой заботы).",
+            "Режим «Ищущий одобрение» (Угодник)": "подстраивается под других, боится сказать «нет», постоянно нуждается в похвале и признании, чтобы чувствовать себя ценным.",
+            "Режим «Перфекционист»": "требует от себя идеальности во всём, иначе считает себя «недостаточно хорошим». Приводит к выгоранию, тревоге и самобичеванию при ошибках.",
+            "Режим «Преследователь»": "холодно и расчётливо обвиняет, манипулирует, требует справедливости. Может быть направлен на других или на себя. Отличается от Разгневанного защитника отсутствием горячности, более рационален.",
+            "Карающий родитель": "внутренний критик, который стыдит, обесценивает, наказывает («ты никчёмный», «сам виноват», «не достоин любви»). Голос значимых взрослых из детства.",
+        }
+    },
+    "health": {
+        "emoji": "🔹",
+        "title": "Здоровые режимы",
+        "modes": {
+            "Здоровый взрослый": "сильная, осознанная часть, которая заботится о себе и внутреннем ребёнке, планирует, работает, ставит границы, анализирует свои режимы и управляет ими. Умеет и любить, и требовать, и отдыхать, не впадая в крайности.",
+            "Счастливый ребёнок": "спонтанная, радостная часть, способная играть, творить, смеяться, получать удовольствие от простых вещей без чувства вины.",
+        }
+    },
+}
+
 
 @dp.callback_query(F.data == "library")
 async def library_menu(callback: types.CallbackQuery):
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=name, callback_data=f"lib_{name}")] for name in LIBRARY.keys()]
-        + [[InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]]
-    )
+    lib_buttons = [[InlineKeyboardButton(text=name, callback_data=f"lib_{name}")] for name in LIBRARY.keys()]
+    lib_buttons.append([InlineKeyboardButton(text="🧠 Схематерапия: режимы", callback_data="lib_schema")])
+    lib_buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")])
+    kb = InlineKeyboardMarkup(inline_keyboard=lib_buttons)
     await callback.message.edit_text("📚 **Библиотека техник**\n\nВыбери тему:", reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+# ===== SCHEMA THERAPY SUBMENU =====
+def build_schema_menu_kb():
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔹 Детские и уязвимые режимы", callback_data="lib_schema_det")],
+            [InlineKeyboardButton(text="🔹 Дезадаптивные копинг-режимы", callback_data="lib_schema_cop")],
+            [InlineKeyboardButton(text="🔹 Здоровые режимы", callback_data="lib_schema_health")],
+            [InlineKeyboardButton(text="🔙 В библиотеку", callback_data="library")],
+        ]
+    )
+    return kb
+
+
+@dp.callback_query(F.data == "lib_schema")
+async def schema_menu(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "🧠 **Схематерапия: режимы**\n\n"
+        "В схема-терапии выделяют три группы режимов — состояний, в которых мы можем находиться. "
+        "Выбери группу, чтобы изучить каждый режим.",
+        reply_markup=build_schema_menu_kb(), parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("lib_schema_det"))
+async def schema_det(callback: types.CallbackQuery):
+    cat = SCHEMA_CATEGORIES["det"]
+    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_det_{name}")]
+            for name in cat["modes"].keys()
+        ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
+    )
+    for name, desc in cat["modes"].items():
+        text += f"**{name}** — {desc}\n\n"
+    await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("lib_schema_cop"))
+async def schema_cop(callback: types.CallbackQuery):
+    cat = SCHEMA_CATEGORIES["cop"]
+    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_cop_{name}")]
+            for name in cat["modes"].keys()
+        ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
+    )
+    for name, desc in cat["modes"].items():
+        text += f"**{name}** — {desc}\n\n"
+    await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("lib_schema_health"))
+async def schema_health(callback: types.CallbackQuery):
+    cat = SCHEMA_CATEGORIES["health"]
+    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_health_{name}")]
+            for name in cat["modes"].keys()
+        ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
+    )
+    for name, desc in cat["modes"].items():
+        text += f"**{name}** — {desc}\n\n"
+    await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("lib_schema_show_"))
+async def schema_show_mode(callback: types.CallbackQuery):
+    parts = callback.data.split("_", 4)
+    cat_key = parts[3]
+    mode_name = parts[4]
+    cat = SCHEMA_CATEGORIES.get(cat_key)
+    if cat and mode_name in cat["modes"]:
+        content = f"🧠 **{mode_name}**\n\n{cat['modes'][mode_name]}"
+    else:
+        content = "Режим не найден."
+    await callback.message.edit_text(
+        content,
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 Назад", callback_data=f"lib_schema_{cat_key}")]
+        ]), parse_mode="Markdown"
+    )
     await callback.answer()
 
 
