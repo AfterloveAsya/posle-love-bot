@@ -10,6 +10,7 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     BotCommand,
+    ReplyKeyboardRemove,
 )
 import db
 import ai_module
@@ -38,6 +39,10 @@ class OARS(StatesGroup):
     waiting_confirmation = State()
 
 
+class BeckTest(StatesGroup):
+    waiting_answer = State()
+
+
 main_menu_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📋 Сегодняшнее задание", callback_data="task")],
@@ -45,6 +50,7 @@ main_menu_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="📊 Моё состояние", callback_data="my_state")],
         [InlineKeyboardButton(text="📋 Мои разборы", callback_data="my_analysis")],
         [InlineKeyboardButton(text="🔍 Углублённый разбор", callback_data="deep_analysis")],
+        [InlineKeyboardButton(text="📋 Тест Бека", callback_data="beck_test")],
         [InlineKeyboardButton(text="📚 Библиотека техник", callback_data="library")],
         [InlineKeyboardButton(text="🆘 Кризисная помощь", callback_data="crisis")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
@@ -170,6 +176,7 @@ async def cmd_start(message: types.Message):
         "Продолжая, ты принимаешь политику конфиденциальности.\n\n"
         "Давай начнём с диагностики твоего состояния."
     )
+    await message.answer("🔹", reply_markup=ReplyKeyboardRemove())
     await message.answer(welcome_text, reply_markup=start_diagnosis_kb)
 
 
@@ -390,6 +397,63 @@ async def show_my_analysis(callback: types.CallbackQuery):
     await callback.answer()
 
 
+# ===== BECK TEST =====
+@dp.callback_query(F.data == "beck_test")
+async def beck_start(callback: types.CallbackQuery, state: FSMContext):
+    await state.update_data(beck_index=0, beck_score=0)
+    await state.set_state(BeckTest.waiting_answer)
+    await callback.answer()
+    await ask_beck_question(callback.message, state, is_new_message=True)
+
+
+async def ask_beck_question(message: types.Message, state: FSMContext, is_new_message: bool = False):
+    data = await state.get_data()
+    index = data.get("beck_index", 0)
+
+    if index >= len(BECK_QUESTIONS):
+        total = data.get("beck_score", 0)
+        if total <= 13:
+            level = "минимальный уровень депрессии"
+        elif total <= 19:
+            level = "лёгкая депрессия"
+        elif total <= 28:
+            level = "умеренная депрессия"
+        else:
+            level = "тяжёлая депрессия"
+        text = (
+            f"📋 **Тест Бека завершён!**\n\n"
+            f"Твой результат: **{total} баллов** — {level}.\n\n"
+            "⚠️ Это не диагноз. Тест показывает текущее эмоциональное состояние.\n"
+            "Если тебя беспокоит результат — обратись к специалисту."
+        )
+        await message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+        await state.clear()
+        return
+
+    topic, options = BECK_QUESTIONS[index]
+    text = f"**Вопрос {index+1}/21:** {topic}\n\n"
+    buttons = []
+    for i, opt in enumerate(options):
+        buttons.append([InlineKeyboardButton(text=opt, callback_data=f"beck_a_{i}")])
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+
+    if is_new_message:
+        await message.answer(text, reply_markup=kb, parse_mode="Markdown")
+    else:
+        await message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+@dp.callback_query(F.data.startswith("beck_a_"))
+async def beck_answer(callback: types.CallbackQuery, state: FSMContext):
+    answer = int(callback.data.split("_")[-1])
+    data = await state.get_data()
+    new_score = data.get("beck_score", 0) + answer
+    new_index = data.get("beck_index", 0) + 1
+    await state.update_data(beck_score=new_score, beck_index=new_index)
+    await callback.answer()
+    await ask_beck_question(callback.message, state)
+
+
 @dp.callback_query(F.data == "task")
 async def show_task(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
@@ -442,7 +506,8 @@ async def diary_history(callback: types.CallbackQuery):
 async def diary_entry(message: types.Message):
     await bot.send_chat_action(message.chat.id, action="typing")
     history = db.get_last_entries(message.from_user.id, limit=3)
-    analysis = await ai_module.analyze_diary_entry(message.text, history=history)
+    username = message.from_user.first_name or message.from_user.username or ""
+    analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username)
     db.save_diary_entry(message.from_user.id, message.text)
     await message.answer(analysis, reply_markup=back_to_menu_kb)
 
@@ -597,6 +662,135 @@ SCHEMA_CATEGORIES = {
         }
     },
 }
+
+BECK_QUESTIONS = [
+    ("Грусть", [
+        "Я не чувствую себя несчастным(ой).",
+        "Я чувствую себя несчастным(ой).",
+        "Я всё время несчастен(на) и не могу выйти из этого состояния.",
+        "Я так несчастен(на), что это невыносимо."
+    ]),
+    ("Пессимизм", [
+        "Я смотрю в будущее без уныния.",
+        "Я испытываю неуверенность в будущем.",
+        "Меня ничего не ждёт в будущем.",
+        "Будущее безнадёжно и ничего не изменится к лучшему."
+    ]),
+    ("Прошлые неудачи", [
+        "Я не чувствую себя неудачником.",
+        "Я считаю, что терпел(а) больше неудач, чем другие.",
+        "Оглядываясь на жизнь, я вижу одни неудачи.",
+        "Я чувствую себя полным(ой) неудачником(цей)."
+    ]),
+    ("Утрата удовольствия", [
+        "Я получаю удовольствие от того же, что и раньше.",
+        "Я не получаю прежнего удовольствия от вещей.",
+        "Я почти не получаю удовольствия от того, что раньше радовало.",
+        "Я совсем не получаю удовольствия ни от чего."
+    ]),
+    ("Чувство вины", [
+        "Я не чувствую себя виноватым(ой).",
+        "Я виню себя чаще, чем стоило бы.",
+        "Я часто чувствую вину за то, что сделал(а) или не сделал(а).",
+        "Я постоянно чувствую вину."
+    ]),
+    ("Ожидание наказания", [
+        "Я не чувствую, что заслуживаю наказания.",
+        "Я считаю, что могу быть наказан(а).",
+        "Я ожидаю наказания.",
+        "Я уже наказан(а) и заслужил(а) это."
+    ]),
+    ("Разочарование в себе", [
+        "Я не разочарован(а) в себе.",
+        "Я разочарован(а) в себе.",
+        "Я испытываю отвращение к себе.",
+        "Я ненавижу себя."
+    ]),
+    ("Самокритика", [
+        "Я не критикую себя больше обычного.",
+        "Я стал(а) больше критиковать себя.",
+        "Я критикую себя за все свои ошибки.",
+        "Я виню себя во всём плохом, что происходит."
+    ]),
+    ("Мысли о самоповреждении", [
+        "У меня нет мыслей о самоповреждении.",
+        "У меня бывают мысли о самоповреждении, но я их не осуществляю.",
+        "Я хочу причинить себе вред.",
+        "Я покончу с собой, если представится возможность."
+    ]),
+    ("Плач", [
+        "Я плачу не чаще обычного.",
+        "Я плачу чаще, чем раньше.",
+        "Я плачу из-за каждой мелочи.",
+        "Я хочу плакать, но не могу."
+    ]),
+    ("Беспокойство", [
+        "Я не более взволнован(а), чем обычно.",
+        "Я более взволнован(а), чем обычно.",
+        "Я очень раздражён(а) и возбуждён(а).",
+        "Я настолько взволнован(а), что не могу усидеть на месте."
+    ]),
+    ("Потеря интереса", [
+        "Я не потерял(а) интереса к другим людям.",
+        "Я меньше интересуюсь другими людьми.",
+        "Я потерял(а) почти весь интерес к другим.",
+        "Я совсем не интересуюсь другими."
+    ]),
+    ("Нерешительность", [
+        "Я принимаю решения так же легко, как и раньше.",
+        "Мне труднее принимать решения.",
+        "Мне очень трудно принимать решения.",
+        "Я вообще не могу принимать решения."
+    ]),
+    ("Ничтожность", [
+        "Я не чувствую себя ничтожным(ой).",
+        "Я чувствую себя менее ценным(ой), чем другие.",
+        "Я чувствую свою никчёмность.",
+        "Я чувствую себя совершенно никчёмным(ой)."
+    ]),
+    ("Потеря энергии", [
+        "У меня столько же энергии, как и раньше.",
+        "У меня меньше энергии, чем раньше.",
+        "У меня недостаточно энергии, чтобы делать что-либо.",
+        "У меня совсем нет энергии."
+    ]),
+    ("Изменения сна", [
+        "Я сплю так же хорошо, как и раньше.",
+        "Я сплю больше/меньше обычного.",
+        "Я просыпаюсь на 1-2 часа раньше и не могу заснуть / сплю намного больше.",
+        "Я просыпаюсь на несколько часов раньше и не могу заснуть / сплю почти весь день."
+    ]),
+    ("Раздражительность", [
+        "Я не более раздражителен(на), чем обычно.",
+        "Я раздражительнее, чем обычно.",
+        "Я раздражён(а) почти всё время.",
+        "Я настолько раздражён(а), что не могу ничем заниматься."
+    ]),
+    ("Изменения аппетита", [
+        "Мой аппетит не изменился.",
+        "Я ем меньше/больше обычного.",
+        "Я ем намного меньше/больше, чем раньше.",
+        "У меня совсем нет аппетита / я постоянно ем."
+    ]),
+    ("Трудности концентрации", [
+        "Я концентрируюсь так же хорошо, как и раньше.",
+        "Мне труднее концентрироваться.",
+        "Мне очень трудно сосредоточиться на чём-либо.",
+        "Я вообще не могу концентрироваться."
+    ]),
+    ("Усталость", [
+        "Я устаю не больше обычного.",
+        "Я устаю быстрее обычного.",
+        "Я устаю от почти всего, что делаю.",
+        "Я слишком устал(а), чтобы делать что-либо."
+    ]),
+    ("Потеря интереса к сексу", [
+        "Мой интерес к сексу не изменился.",
+        "Я меньше интересуюсь сексом, чем раньше.",
+        "Мой интерес к сексу значительно снизился.",
+        "Я совсем потерял(а) интерес к сексу."
+    ]),
+]
 
 
 @dp.callback_query(F.data == "library")

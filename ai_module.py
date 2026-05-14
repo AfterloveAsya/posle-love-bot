@@ -4,33 +4,62 @@ import os
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "deepseek/deepseek-chat"
+
+MODEL_DIARY = "openai/gpt-4o-mini"
+MODEL_EXPERT = "deepseek/deepseek-chat"
+
+DIARY_SYSTEM_PROMPT = (
+    "Ты опытный психолог-консультант, специализирующийся на гештальт-терапии и "
+    "когнитивно-поведенческой терапии (КПТ). Твоя роль — предоставлять эмоциональную "
+    "поддержку, помогать людям разобраться в своих чувствах и найти конструктивные "
+    "способы решения проблем.\n\n"
+    "ПРИНЦИПЫ РАБОТЫ:\n\n"
+    "1. ГЕШТАЛЬТ-ТЕРАПИЯ:\n"
+    "   - Фокусируйся на «здесь и сейчас»\n"
+    "   - Помогай клиенту осознавать свои чувства и телесные ощущения\n"
+    "   - Задавай вопросы типа: «Что ты чувствуешь прямо сейчас?», "
+    "«Где в теле ты это ощущаешь?»\n\n"
+    "2. КОГНИТИВНО-ПОВЕДЕНЧЕСКАЯ ТЕРАПИЯ:\n"
+    "   - Помогай выявлять деструктивные мыслительные паттерны\n"
+    "   - Исследуй связь между мыслями, чувствами и поведением\n"
+    "   - Предлагай альтернативные способы мышления\n\n"
+    "3. СТИЛЬ ОБЩЕНИЯ:\n"
+    "   - Проявляй эмпатию и безоценочное принятие\n"
+    "   - Используй активное слушание и отражение чувств\n"
+    "   - Задавай открытые вопросы, способствующие самоисследованию\n"
+    "   - Поддерживай тёплый, профессиональный тон\n\n"
+    "4. ЭТИЧЕСКИЕ ПРИНЦИПЫ:\n"
+    "   - Не диагностируй психические расстройства\n"
+    "   - При серьёзных проблемах рекомендуй обращение к специалисту\n"
+    "   - Признавай ограничения AI-консультирования\n\n"
+    "ВАЖНО:\n"
+    "- Отвечай на русском языке\n"
+    "- Ответы должны быть 200-400 слов\n"
+    "- При суицидальных мыслях немедленно рекомендуй обратиться к специалисту\n"
+    "- Помни: твоя цель — помочь развить навыки самопомощи и самопонимания"
+)
 
 
-async def analyze_diary_entry(text: str, history: list = None) -> str:
+async def analyze_diary_entry(text: str, history: list = None, username: str = "") -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
+    user_content = text
+    if username:
+        user_content += f"\n\nКлиента зовут {username}."
     payload = {
-        "model": MODEL,
+        "model": MODEL_DIARY,
         "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "Ты — бережный психолог-ассистент. Пользователь делится переживаниями. "
-                    "Выдели 1-2 главные эмоции и назови их мягко, без оценок. Не давай советов. "
-                    "Заверши короткой поддержкой. Пиши только на русском языке. Не более 5 предложений."
-                )
-            },
-            {"role": "user", "content": text}
+            {"role": "system", "content": DIARY_SYSTEM_PROMPT},
+            {"role": "user", "content": user_content}
         ],
         "temperature": 0.7,
-        "max_tokens": 200
+        "max_tokens": 600
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=20) as resp:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=25) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"OpenRouter error {resp.status}: {error_text}")
@@ -49,7 +78,7 @@ async def expert_analysis(user_story: list) -> str:
         "Content-Type": "application/json"
     }
     payload = {
-        "model": MODEL,
+        "model": MODEL_EXPERT,
         "messages": [
             {
                 "role": "system",
