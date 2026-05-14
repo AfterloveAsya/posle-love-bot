@@ -43,6 +43,22 @@ class BeckTest(StatesGroup):
     waiting_answer = State()
 
 
+class Tests(StatesGroup):
+    waiting = State()
+
+
+LUSCHER_COLORS = [
+    ("🔴", "Красный"),
+    ("🟡", "Жёлтый"),
+    ("🟢", "Зелёный"),
+    ("🔵", "Синий"),
+    ("🟣", "Фиолетовый"),
+    ("🟤", "Коричневый"),
+    ("⬜", "Серый"),
+    ("⬛", "Чёрный"),
+]
+
+
 main_menu_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="📋 Сегодняшнее задание", callback_data="task")],
@@ -50,7 +66,7 @@ main_menu_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="📊 Моё состояние", callback_data="my_state")],
         [InlineKeyboardButton(text="📋 Мои разборы", callback_data="my_analysis")],
         [InlineKeyboardButton(text="🔍 Углублённый разбор", callback_data="deep_analysis")],
-        [InlineKeyboardButton(text="📋 Тест Бека", callback_data="beck_test")],
+        [InlineKeyboardButton(text="📋 Тесты", callback_data="tests_menu")],
         [InlineKeyboardButton(text="📚 Библиотека техник", callback_data="library")],
         [InlineKeyboardButton(text="🆘 Кризисная помощь", callback_data="crisis")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
@@ -454,6 +470,221 @@ async def beck_answer(callback: types.CallbackQuery, state: FSMContext):
     await ask_beck_question(callback.message, state)
 
 
+# ===== TESTS MENU =====
+_test_sessions = {}
+
+def test_level(score, levels):
+    for lo, hi, label in levels:
+        if lo <= score <= hi:
+            return label
+    return levels[-1][2]
+
+def tests_menu_kb():
+    kb = [[InlineKeyboardButton(text="📋 Шкала депрессии Бека (BDI)", callback_data="beck_test")]]
+    for k, v in TESTS_MENU.items():
+        kb.append([InlineKeyboardButton(text=v["name"], callback_data=f"t_start_{k}")])
+    kb.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+@dp.callback_query(F.data == "tests_menu")
+async def tests_menu_handler(callback: types.CallbackQuery):
+    text = "📋 **Тесты и опросники**\n\nВыбери тест. Результаты помогут лучше понять своё состояние."
+    await callback.message.edit_text(text, reply_markup=tests_menu_kb(), parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("t_start_"))
+async def start_test(callback: types.CallbackQuery):
+    tid = callback.data[8:]
+
+    if tid == "luscher":
+        await start_luscher(callback)
+        return
+
+    test_map = {
+        "bai": (_BAI_QUESTIONS, "sum", [(0, 7, "низкая тревога"), (8, 15, "лёгкая тревога"), (16, 25, "умеренная тревога"), (26, 63, "высокая тревога")]),
+        "bhs": (_BHS_QUESTIONS, "bhs", [(0, 3, "минимальная безнадёжность"), (4, 8, "лёгкая"), (9, 14, "умеренная"), (15, 20, "тяжёлая безнадёжность")]),
+        "gad7": (_GAD7_QUESTIONS, "sum", [(0, 4, "минимальная тревога"), (5, 9, "лёгкая"), (10, 14, "умеренная"), (15, 21, "высокая тревога")]),
+        "ptgi": (_PTGI_QUESTIONS, "sum", [(0, 20, "низкий рост"), (21, 40, "умеренный"), (41, 63, "заметный"), (64, 105, "высокий посттравматический рост")]),
+        "dass21": (_DASS21_QUESTIONS, "dass21", None),
+    }
+    qs, stype, levels = test_map[tid]
+    _test_sessions[callback.from_user.id] = {"tid": tid, "q_index": 0, "answers": [], "total_q": len(qs), "qs": qs, "stype": stype, "levels": levels}
+    await callback.answer()
+    await show_test_question(callback.message, callback.from_user.id)
+
+
+async def show_test_question(msg, uid):
+    sess = _test_sessions.get(uid)
+    if not sess:
+        return
+    qidx = sess["q_index"]
+    qs = sess["qs"]
+    if qidx >= sess["total_q"]:
+        await finish_test(msg, uid)
+        return
+
+    if sess["tid"] == "bhs":
+        text_q, is_rev = qs[qidx]
+        opts = _BHS_OPTS
+    else:
+        text_q, opts = qs[qidx]
+
+    text = f"**Вопрос {qidx+1}/{sess['total_q']}:** {text_q}\n\n"
+    buttons = [[InlineKeyboardButton(text=opt, callback_data=f"t_ans_{i}")] for i, opt in enumerate(opts)]
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await msg.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+
+
+@dp.callback_query(F.data.startswith("t_ans_"))
+async def test_answer(callback: types.CallbackQuery):
+    uid = callback.from_user.id
+    val = int(callback.data.split("_")[-1])
+    sess = _test_sessions.get(uid)
+    if not sess:
+        await callback.answer("Тест не найден. Начни заново.", show_alert=True)
+        return
+
+    # BHS: reverse scoring
+    if sess["tid"] == "bhs":
+        _, is_rev = sess["qs"][sess["q_index"]]
+        val = 1 - val if is_rev else val
+
+    sess["answers"].append(val)
+    sess["q_index"] += 1
+    await callback.answer()
+    await show_test_question(callback.message, uid)
+
+
+def compute_score(tid, answers):
+    if tid == "bai":
+        return sum(answers), None
+    elif tid == "bhs":
+        return sum(answers), None
+    elif tid == "gad7":
+        return sum(answers), None
+    elif tid == "ptgi":
+        return sum(answers), None
+    elif tid == "dass21":
+        d = sum(answers[i]*2 for i in range(21) if _DASS21_QUESTIONS[i][1] == "D")
+        a = sum(answers[i]*2 for i in range(21) if _DASS21_QUESTIONS[i][1] == "A")
+        s = sum(answers[i]*2 for i in range(21) if _DASS21_QUESTIONS[i][1] == "S")
+        return None, {"D": d, "A": a, "S": s}
+    return 0, None
+
+
+async def finish_test(msg, uid):
+    sess = _test_sessions.pop(uid, None)
+    if not sess:
+        return
+    score, sub = compute_score(sess["tid"], sess["answers"])
+
+    if sess["tid"] == "dass21":
+        d, a, s = sub["D"], sub["A"], sub["S"]
+        text = (
+            f"📊 **DASS-21 завершён!**\n\n"
+            f"• Депрессия (D): **{d}** {'☀️' if d <= 9 else '🌤️' if d <= 13 else '⛅' if d <= 20 else '🌧️'}\n"
+            f"• Тревога (A): **{a}** {'☀️' if a <= 7 else '🌤️' if a <= 9 else '⛅' if a <= 14 else '🌧️'}\n"
+            f"• Стресс (S): **{s}** {'☀️' if s <= 14 else '🌤️' if s <= 18 else '⛅' if s <= 25 else '🌧️'}\n\n"
+            f"Нормы: D≤9, A≤7, S≤14 — норма. Выше — требуется внимание.\n"
+            "⚠️ Это скрининг, не диагноз."
+        )
+    else:
+        level = test_level(score, sess["levels"])
+        text = (
+            f"📋 **{TESTS_MENU[sess['tid']]['name']} завершён!**\n\n"
+            f"Твой результат: **{score} баллов** — {level}.\n\n"
+            "⚠️ Это не диагноз. Тест показывает текущее состояние."
+        )
+    await msg.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+
+
+# ===== LUSCHER TEST =====
+async def start_luscher(callback: types.CallbackQuery):
+    _test_sessions[callback.from_user.id] = {"tid": "luscher", "picked": [], "step": 0}
+    await callback.answer()
+    await show_luscher_colors(callback.message, callback.from_user.id)
+
+
+async def show_luscher_colors(msg, uid):
+    sess = _test_sessions.get(uid)
+    if not sess or sess["step"] >= len(LUSCHER_COLORS):
+        await finish_luscher(msg, uid)
+        return
+    step = sess["step"]
+    remaining = [(i, emoji, name) for i, (emoji, name) in enumerate(LUSCHER_COLORS) if i not in sess["picked"]]
+    text = f"🎨 **Тест Люшера**\n\nВыбери **{step+1}-й** цвет (самый приятный из оставшихся):\n\n"
+    picked_emojis = [f"{LUSCHER_COLORS[i][0]} " + ("★" if pos == 0 else f"({pos+1})") for pos, i in enumerate(sess["picked"])]
+    if picked_emojis:
+        text += "Уже выбрано: " + ", ".join(picked_emojis) + "\n\n"
+    buttons = [[InlineKeyboardButton(text=f"{emoji} {name}", callback_data=f"lusch_pick_{i}")] for i, emoji, name in remaining]
+    await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
+
+
+@dp.callback_query(F.data.startswith("lusch_pick_"))
+async def luscher_pick(callback: types.CallbackQuery):
+    uid = callback.from_user.id
+    idx = int(callback.data.split("_")[-1])
+    sess = _test_sessions.get(uid)
+    if not sess:
+        await callback.answer("Тест не найден.", show_alert=True)
+        return
+    sess["picked"].append(idx)
+    sess["step"] += 1
+    await callback.answer()
+    await show_luscher_colors(callback.message, uid)
+
+
+async def finish_luscher(msg, uid):
+    sess = _test_sessions.pop(uid, None)
+    if not sess:
+        return
+    order = sess["picked"]
+    pos = {c: i for i, c in enumerate(order)}  # color_idx -> position
+    primary_names = {0: "Красный", 1: "Жёлтый", 2: "Зелёный", 3: "Синий"}
+    extra_names = {4: "Фиолетовый", 5: "Коричневый", 6: "Серый", 7: "Чёрный"}
+    text = "🎨 **Тест Люшера завершён!**\n\nТвой порядок выбора:\n"
+    for i, c in enumerate(order):
+        emoji, name = LUSCHER_COLORS[c]
+        text += f"{i+1}. {emoji} {name}\n"
+
+    text += "\n**Упрощённая интерпретация:**\n"
+    prim_ok = sum(1 for c in order[:4] if c < 4)
+    prim_late = sum(1 for c in order[4:] if c < 4)
+    extra_early = sum(1 for c in order[:4] if c >= 4)
+
+    if prim_ok >= 3:
+        text += "✅ Основные цвета (красный, жёлтый, зелёный, синий) в начале — хороший признак эмоционального равновесия.\n"
+    elif prim_ok >= 1:
+        text += "⚠️ Часть основных цветов сдвинута в конец — возможна тревога или подавленность.\n"
+    else:
+        text += "🔴 Основные цвета в конце — возможен высокий уровень стресса или усталости.\n"
+
+    if prim_late >= 3:
+        text += "🔴 Почти все базовые цвета отвергнуты — стоит обратить внимание на эмоциональное состояние.\n"
+
+    if extra_early >= 2:
+        text += "⚪ Дополнительные цвета в начале — может быть потребность в покое или избегании.\n"
+
+    if order[0] == 2:
+        text += "🟢 Зелёный на первом месте — потребность в уверенности и стабильности.\n"
+    elif order[0] == 0:
+        text += "🔴 Красный на первом месте — активность, потребность в действии.\n"
+    elif order[0] == 3:
+        text += "🔵 Синий на первом месте — потребность в покое и гармонии.\n"
+    elif order[0] == 1:
+        text += "🟡 Жёлтый на первом месте — потребность в радости и переменах.\n"
+
+    if order[-1] == 7:
+        text += "⬛ Чёрный на последнем месте — неприятие пустоты, надежда на изменения.\n"
+    elif order[-1] == 6:
+        text += "⬜ Серый на последнем месте — нежелание отгораживаться от мира.\n"
+
+    text += "\n*⚠️ Упрощённая трактовка. Полный тест Люшера проводится специалистом.*"
+    await msg.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+
+
 @dp.callback_query(F.data == "task")
 async def show_task(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
@@ -791,6 +1022,127 @@ BECK_QUESTIONS = [
         "Я совсем потерял(а) интерес к сексу."
     ]),
 ]
+
+_BAI_OPTS = ("Совсем нет", "Слабо", "Умеренно", "Сильно")
+_BAI_QUESTIONS = [
+    ("Онемение или покалывание", _BAI_OPTS),
+    ("Ощущение жара", _BAI_OPTS),
+    ("Неуверенная походка (дрожь в ногах)", _BAI_OPTS),
+    ("Невозможность расслабиться", _BAI_OPTS),
+    ("Страх, что случится самое плохое", _BAI_OPTS),
+    ("Головокружение или потеря равновесия", _BAI_OPTS),
+    ("Учащённое сердцебиение", _BAI_OPTS),
+    ("Неустойчивость", _BAI_OPTS),
+    ("Ужас или страх", _BAI_OPTS),
+    ("Нервозность", _BAI_OPTS),
+    ("Дрожь в руках", _BAI_OPTS),
+    ("Ощущение удушья", _BAI_OPTS),
+    ("Страх потерять контроль", _BAI_OPTS),
+    ("Затруднённое дыхание", _BAI_OPTS),
+    ("Страх умереть", _BAI_OPTS),
+    ("Испуг", _BAI_OPTS),
+    ("Расстройство желудка", _BAI_OPTS),
+    ("Обмороки", _BAI_OPTS),
+    ("Покраснение лица", _BAI_OPTS),
+    ("Потливость (не связанная с жарой)", _BAI_OPTS),
+    ("Ком в горле", _BAI_OPTS),
+]
+
+_BHS_OPTS = ("Нет", "Да")
+# (question, is_reversed) — reversed means "Нет"=1, "Да"=0
+_BHS_QUESTIONS = [
+    ("Я жду будущего с надеждой и энтузиазмом", True),
+    ("Мне лучше сдаться, потому что я ничего не могу изменить", False),
+    ("Когда всё плохо, мне помогает мысль, что так будет не всегда", True),
+    ("Я не могу представить, какой будет моя жизнь через 10 лет", False),
+    ("У меня достаточно времени, чтобы осуществить свои планы", True),
+    ("Я ожидаю, что у меня будет успех в том, что мне интересно", True),
+    ("Будущее кажется мне тёмным", False),
+    ("Я надеюсь, что в жизни у меня будет больше хорошего, чем у среднего человека", True),
+    ("Мне не везёт, и нет причин ждать, что в будущем будет везти", False),
+    ("Мой опыт научил меня, что всё к лучшему", True),
+    ("Будущее, которое меня ждёт, кажется мне плохим", False),
+    ("Я не думаю, что получу то, что действительно хочу", False),
+    ("Когда я думаю о будущем, я чувствую, что буду счастливее, чем сейчас", True),
+    ("Всё идёт не так, как надо", False),
+    ("Я верю в своё светлое будущее", True),
+    ("Я никогда не получаю то, чего хочу, поэтому глупо чего-то хотеть", False),
+    ("Маловероятно, что я буду по-настоящему удовлетворён(а) в будущем", False),
+    ("Будущее кажется мне расплывчатым и неопределённым", False),
+    ("Я жду больше хорошего, чем плохого", True),
+    ("Бесполезно добиваться того, что я хочу, потому что, скорее всего, я этого не получу", False),
+]
+
+_GAD7_OPTS = ("Совсем нет", "Несколько дней", "Более половины дней", "Почти каждый день")
+_GAD7_QUESTIONS = [
+    ("Нервозность, тревожность или ощущение «на взводе»", _GAD7_OPTS),
+    ("Неспособность прекратить беспокоиться или контролировать тревогу", _GAD7_OPTS),
+    ("Чрезмерное беспокойство по разным поводам", _GAD7_OPTS),
+    ("Трудность расслабиться", _GAD7_OPTS),
+    ("Такая неусидчивость, что трудно сидеть на месте", _GAD7_OPTS),
+    ("Лёгкая раздражительность или вспыльчивость", _GAD7_OPTS),
+    ("Чувство страха, будто вот-вот случится что-то ужасное", _GAD7_OPTS),
+]
+
+_PTGI_OPTS = ("Не было", "Очень слабо", "Слабо", "Умеренно", "Сильно", "Очень сильно")
+_PTGI_QUESTIONS = [
+    ("Я изменил(а) свои приоритеты в жизни", _PTGI_OPTS),
+    ("Я стал(а) больше ценить собственную жизнь", _PTGI_OPTS),
+    ("У меня появились новые интересы", _PTGI_OPTS),
+    ("Я почувствовал(а) в себе больше силы", _PTGI_OPTS),
+    ("Я стал(а) лучше понимать духовные вопросы", _PTGI_OPTS),
+    ("Я яснее понял(а), на кого могу положиться", _PTGI_OPTS),
+    ("Я выбрал(а) новый жизненный путь", _PTGI_OPTS),
+    ("Я стал(а) более близким(ой) с людьми", _PTGI_OPTS),
+    ("Я стал(а) более открыто выражать эмоции", _PTGI_OPTS),
+    ("Я знаю, что могу справиться с трудностями", _PTGI_OPTS),
+    ("Я могу делать свою жизнь лучше", _PTGI_OPTS),
+    ("Я стал(а) лучше принимать ход событий", _PTGI_OPTS),
+    ("Я могу лучше ценить каждый день", _PTGI_OPTS),
+    ("У меня появились новые возможности", _PTGI_OPTS),
+    ("У меня появилось больше сострадания к другим", _PTGI_OPTS),
+    ("Я стал(а) больше вкладывать в отношения", _PTGI_OPTS),
+    ("Я стал(а) больше стараться изменить то, что нужно", _PTGI_OPTS),
+    ("Я стал(а) более религиозным/ой или духовным/ой", _PTGI_OPTS),
+    ("Я обнаружил(а), что сильнее, чем думал(а)", _PTGI_OPTS),
+    ("Я многое узнал(а) о том, на что способны люди", _PTGI_OPTS),
+    ("Я стал(а) лучше принимать необходимость быть зависимым/ой", _PTGI_OPTS),
+]
+
+_DASS21_OPTS = ("Не подходит", "Отчасти", "Значительно", "Очень")
+# (question, subscale) where subscale: D=depression, A=anxiety, S=stress
+_DASS21_QUESTIONS = [
+    ("Мне было трудно успокоиться", "S"),
+    ("Я чувствовал(а) сухость во рту", "A"),
+    ("Я не мог(ла) испытывать положительные эмоции", "D"),
+    ("У меня были проблемы с дыханием", "A"),
+    ("Мне было трудно начать действовать", "D"),
+    ("Я реагировал(а) слишком остро", "S"),
+    ("У меня была дрожь", "A"),
+    ("Я тратил(а) много энергии на тревогу", "S"),
+    ("Я боялся(лась) ситуаций, где могу запаниковать", "A"),
+    ("Я чувствовал(а), что ждать не от чего", "D"),
+    ("Я чувствовал(а) себя беспокойным(ой)", "S"),
+    ("Мне было трудно расслабиться", "S"),
+    ("Я чувствовал(а) уныние и подавленность", "D"),
+    ("Я не мог(ла) терпеть то, что мешает делу", "S"),
+    ("Я чувствовал(а) близость паники", "A"),
+    ("Я ни к чему не мог(ла) проявить энтузиазм", "D"),
+    ("Я чувствовал(а), что не представляю ценности", "D"),
+    ("Я был(а) довольно обидчив(а)", "S"),
+    ("Я чувствовал(а) изменение сердцебиения", "A"),
+    ("Я чувствовал(а) страх без причины", "A"),
+    ("Жизнь казалась мне бессмысленной", "D"),
+]
+
+TESTS_MENU = {
+    "bai": {"name": "😰 Шкала тревоги Бека (BAI)", "desc": "21 вопрос о физических симптомах тревоги."},
+    "bhs": {"name": "🌑 Шкала безнадёжности Бека (BHS)", "desc": "20 утверждений о вашем взгляде в будущее."},
+    "gad7": {"name": "😟 GAD-7 (тревога)", "desc": "7 вопросов о тревоге за последние 2 недели."},
+    "ptgi": {"name": "🌱 PTGI (посттравматический рост)", "desc": "21 вопрос — что изменилось после кризиса."},
+    "dass21": {"name": "📊 DASS-21 (депрессия, тревога, стресс)", "desc": "21 вопрос, оценивает 3 шкалы."},
+    "luscher": {"name": "🎨 Тест Люшера", "desc": "Выберите цвета в порядке предпочтения."},
+}
 
 
 @dp.callback_query(F.data == "library")
