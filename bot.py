@@ -46,7 +46,7 @@ main_menu_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="🔍 Углублённый разбор", callback_data="deep_analysis")],
         [InlineKeyboardButton(text="📚 Библиотека техник", callback_data="library")],
         [InlineKeyboardButton(text="🆘 Кризисная помощь", callback_data="crisis")],
-        [InlineKeyboardButton(text="⚙️ Подписка", callback_data="subscribe")],
+        [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings")],
     ]
 )
 
@@ -59,6 +59,31 @@ back_to_menu_kb = InlineKeyboardMarkup(
 start_diagnosis_kb = InlineKeyboardMarkup(
     inline_keyboard=[
         [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")]
+    ]
+)
+
+diary_menu_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Написать в дневник", callback_data="diary_write")],
+        [InlineKeyboardButton(text="📖 Мои записи", callback_data="diary_history")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+    ]
+)
+
+settings_menu_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⏰ Время рассылки", callback_data="settings_time")],
+        [InlineKeyboardButton(text="💎 Подписка", callback_data="subscribe")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+    ]
+)
+
+time_settings_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="🕐 8:00 / 20:00", callback_data="time_8_20")],
+        [InlineKeyboardButton(text="🕑 9:00 / 21:00", callback_data="time_9_21")],
+        [InlineKeyboardButton(text="🕒 10:00 / 22:00", callback_data="time_10_22")],
+        [InlineKeyboardButton(text="🔙 В настройки", callback_data="settings")]
     ]
 )
 
@@ -301,19 +326,31 @@ async def back_to_menu(callback: types.CallbackQuery, state: FSMContext):
 async def show_my_state(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
     if user_data is None:
-        text = "Ты ещё не проходил(а) диагностику. Нажми /start, чтобы начать."
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ])
+        await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=kb)
     else:
         emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
         user_state = user_data["state"]
-        score = user_data["score"]
+        total = user_data["score"]
         updated = user_data["updated_at"][:10]
+        level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
+        progress_bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
+        premium = "⭐ Premium" if user_data.get("is_premium") else "—"
         text = (
-            f"{emoji.get(user_state, '')} Твоё состояние: **{user_state.capitalize()}**\n\n"
-            f"Баллов: {score} (из 21)\n"
-            f"Последняя диагностика: {updated}\n\n"
-            "Ты можешь пройти диагностику заново — нажми /start."
+            f"{emoji.get(user_state, '')} **Твоё состояние:** {level}\n\n"
+            f"`{progress_bar}`\nБаллов: {total}/21\n"
+            f"Последняя диагностика: {updated}\n"
+            f"Статус: {premium}\n\n"
+            "Можешь пройти диагностику заново в любой момент."
         )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ])
+        await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
@@ -333,11 +370,36 @@ async def show_task(callback: types.CallbackQuery):
 
 # ===== DIARY =====
 @dp.callback_query(F.data == "diary")
-async def diary_prompt(callback: types.CallbackQuery):
+async def diary_menu(callback: types.CallbackQuery):
     await callback.message.edit_text(
-        "📓 Напиши мне сообщение — я проанализирую его через AI и сохраню в твой дневник.",
+        "📓 **Дневник рефлексии**\n\nНапиши мне сообщение, и я проанализирую его через AI. Или посмотри свои прошлые записи.",
+        reply_markup=diary_menu_kb, parse_mode="Markdown"
+    )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "diary_write")
+async def diary_write(callback: types.CallbackQuery):
+    await callback.message.edit_text(
+        "✏️ Напиши мне сообщение — я проанализирую его и сохраню.",
         reply_markup=back_to_menu_kb
     )
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "diary_history")
+async def diary_history(callback: types.CallbackQuery):
+    entries = db.get_last_entries(callback.from_user.id)
+    if not entries:
+        text = "У тебя пока нет записей. Напиши что-нибудь в дневник!"
+    else:
+        # get_last_entries returns list of strings; show last 5
+        lines = []
+        for i, e in enumerate(entries[-5:], 1):
+            preview = e[:80] + "..." if len(e) > 80 else e
+            lines.append(f"**{i}.** {preview}")
+        text = "📖 **Мои записи:**\n\n" + "\n\n".join(lines)
+    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()
 
 
@@ -348,6 +410,39 @@ async def diary_entry(message: types.Message):
     analysis = await ai_module.analyze_diary_entry(message.text, history=history)
     db.save_diary_entry(message.from_user.id, message.text)
     await message.answer(analysis, reply_markup=back_to_menu_kb)
+
+
+# ===== SETTINGS =====
+@dp.callback_query(F.data == "settings")
+async def settings_menu(callback: types.CallbackQuery):
+    await callback.message.edit_text("⚙️ **Настройки**\n\nВыбери раздел:", reply_markup=settings_menu_kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "settings_time")
+async def settings_time(callback: types.CallbackQuery):
+    user_data = db.get_user_state(callback.from_user.id)
+    mh = 6
+    eh = 18
+    if user_data and "morning_hour" in user_data:
+        mh = user_data["morning_hour"]
+        eh = user_data["evening_hour"]
+    text = f"⏰ **Время рассылки**\n\nСейчас: утро **{mh}:00 UTC** ({mh+3}:00 МСК) / вечер **{eh}:00 UTC** ({eh+3}:00 МСК)\n\nВыбери новое время:"
+    await callback.message.edit_text(text, reply_markup=time_settings_kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("time_"))
+async def set_time(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    morning = int(parts[1])
+    evening = int(parts[2])
+    db.set_user_time(callback.from_user.id, morning, evening)
+    await callback.message.edit_text(
+        f"✅ Время сохранено!\n\nУтро: **{morning}:00 UTC** ({morning+3}:00 МСК)\nВечер: **{evening}:00 UTC** ({evening+3}:00 МСК)",
+        reply_markup=settings_menu_kb, parse_mode="Markdown"
+    )
+    await callback.answer()
 
 
 # ===== SUBSCRIBE / MANUAL PAYMENT =====
@@ -411,12 +506,27 @@ async def cmd_activate(message: types.Message):
 
 # ===== LIBRARY =====
 LIBRARY = {
-    "Уязвимый Ребёнок": (
-        "Это часть нас, которая хранит боль, одиночество и потребность в заботе.\n\n"
+    "Внутренний Ребёнок": (
+        "В схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит детские боли.\n\n"
         "🧸 **Как работать:**\n"
         "• Представь себя в детстве. Что бы ты хотел(а) услышать?\n"
         "• Напиши письмо себе-ребёнку со словами поддержки\n"
-        "• Положи руку на сердце и скажи: «Я с тобой»"
+        "• Положи руку на сердце и скажи: «Я с тобой»\n\n"
+        "📌 **Практика:** закрой глаза, вспомни себя в 5-7 лет. Мысленно обними этого ребёнка."
+    ),
+    "Заземление": (
+        "Техники, которые возвращают в «здесь и сейчас» при тревоге:\n\n"
+        "🌳 **5-4-3-2-1:** Назови 5 вещей, 4 — потрогать, 3 — услышать, 2 — запаха, 1 — вкус.\n\n"
+        "💨 **Квадратное дыхание:** Вдох на 4 — задержка на 4 — выдох на 4 — задержка на 4.\n\n"
+        "🧊 **Холодная вода:** Умойся или подержи запястья под холодной водой 30 сек.\n\n"
+        "👁 **Фиксация взгляда:** Рассматривай предмет 2 минуты, замечая детали."
+    ),
+    "Мысли и чувства": (
+        "💭 **Работа с мыслями и чувствами**\n\n"
+        "📓 **Дневник мыслей:** Записывай ситуацию → мысль → эмоцию → реакцию.\n\n"
+        "✉️ **Письмо без отправки:** Напиши человеку всё, что чувствуешь. Не отправляй.\n\n"
+        "🔄 **Смена перспективы:** «Что бы я сказал(а) другу в такой ситуации?»\n\n"
+        "💬 **Аффирмации:** «Я имею право на свои чувства», «Я ценен/ценна сам(а) по себе»."
     ),
     "Карающий Родитель": (
         "Внутренний критик, который ругает за ошибки и не даёт покоя.\n\n"
@@ -424,15 +534,6 @@ LIBRARY = {
         "• Заметь его голос и скажи «Стоп»\n"
         "• Дай ему смешное имя (например, «Ворчун»)\n"
         "• Ответь ему с позиции взрослого: «Я делаю всё, что могу»"
-    ),
-    "Заземление": (
-        "Практика возвращения в тело через 5 чувств.\n\n"
-        "🌳 **5-4-3-2-1:**\n"
-        "• 5 вещей, которые видишь\n"
-        "• 4 — можешь потрогать\n"
-        "• 3 — слышишь\n"
-        "• 2 — запаха\n"
-        "• 1 — вкус"
     ),
     "Управление триггерами": (
         "Триггер — стимул, вызывающий острую эмоциональную реакцию.\n\n"
