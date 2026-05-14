@@ -10,8 +10,6 @@ from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     BotCommand,
-    LabeledPrice,
-    PreCheckoutQuery,
 )
 import db
 import ai_module
@@ -352,7 +350,7 @@ async def diary_entry(message: types.Message):
     await message.answer(analysis, reply_markup=back_to_menu_kb)
 
 
-# ===== SUBSCRIBE / STARS =====
+# ===== SUBSCRIBE / MANUAL PAYMENT =====
 @dp.callback_query(F.data == "subscribe")
 async def subscribe_info(callback: types.CallbackQuery):
     if db.is_premium(callback.from_user.id):
@@ -363,35 +361,38 @@ async def subscribe_info(callback: types.CallbackQuery):
         await callback.answer()
         return
 
-    prices = [
-        LabeledPrice(label="Годовая подписка", amount=2990),
-        LabeledPrice(label="Месячная подписка", amount=499),
-    ]
-    await bot.send_invoice(
-        chat_id=callback.from_user.id,
-        title="Подписка «После любви»",
-        description="Premium-доступ: персональные задания, AI-разбор, настройка времени.",
-        payload="premium_subscription",
-        provider_token="",
-        currency="XTR",
-        prices=prices,
-        start_parameter="premium",
+    pay_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 Оплатить 499₽ (месяц)", url="https://business.tbank.ru/invoices/api/v1/public/document/U4wLoZ06ajfAeZIUBIZAzRIZjpzy70Njj3tSyayZjNnN6WfIa2?nonce=XoBRhbT4")],
+            [InlineKeyboardButton(text="💳 Оплатить 2990₽ (год)", url="https://b2b.cbrpay.ru/BS1B000S6GJK30P18TFPD4AC31QUTHUU")],
+            [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data="confirm_payment")],
+            [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
+        ]
+    )
+    await callback.message.edit_text(
+        "⚙️ **Premium-подписка**\n\n"
+        "• Персональные задания каждый день\n"
+        "• AI-анализ дневника\n"
+        "• Утренние и вечерние сообщения\n\n"
+        "После оплаты нажми «Я оплатил», и мы активируем твой доступ.",
+        reply_markup=pay_kb, parse_mode="Markdown"
     )
     await callback.answer()
 
 
-@dp.pre_checkout_query()
-async def checkout_process(pre_checkout_query: PreCheckoutQuery):
-    await bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-
-@dp.message(F.successful_payment)
-async def successful_payment(message: types.Message):
-    if message.successful_payment.invoice_payload == "premium_subscription":
-        amount = message.successful_payment.total_amount
-        days = 365 if amount == 2990 else 30
-        db.activate_premium(message.from_user.id, days)
-        await message.answer("🎉 Твоя Premium-подписка активирована! Теперь тебе доступны все возможности.")
+@dp.callback_query(F.data == "confirm_payment")
+async def confirm_payment(callback: types.CallbackQuery):
+    user = callback.from_user
+    await callback.message.edit_text(
+        "Спасибо! Твоя оплата проверяется. Мы активируем подписку в ближайшее время.",
+        reply_markup=back_to_menu_kb
+    )
+    await bot.send_message(
+        chat_id=ADMIN_USER_ID,
+        text=f"🔔 Пользователь @{user.username or 'нет username'} (ID: {user.id}) оплатил подписку. Проверьте и активируйте командой:\n`/activate {user.id}`",
+        parse_mode="Markdown"
+    )
+    await callback.answer()
 
 
 # ===== ADMIN =====
