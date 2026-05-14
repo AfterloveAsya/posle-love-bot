@@ -63,7 +63,7 @@ def save_diagnosis(user_id: int, state: str, score: int):
 def get_user_state(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT state, score, updated_at, is_premium FROM users WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT state, score, updated_at, is_premium, morning_hour, evening_hour FROM users WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
