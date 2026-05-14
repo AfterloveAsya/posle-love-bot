@@ -264,9 +264,23 @@ async def process_diag_answer(callback: types.CallbackQuery, state: FSMContext):
     await ask_next_question(callback.message, state)
 
 
+@dp.message(Diagnosis.waiting_answer)
+async def diag_text_handler(message: types.Message, state: FSMContext):
+    text = message.text.strip().lower()
+    if text in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+    else:
+        await message.answer("Пожалуйста, выбери вариант из кнопок ниже 👇")
+
+
 # ===== OARS DIALOG =====
 @dp.message(OARS.waiting_situation)
 async def process_situation(message: types.Message, state: FSMContext):
+    if message.text.strip().lower() in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
     db.save_user_answer(message.from_user.id, "Ситуация", message.text)
     await message.answer("Какое чувство сейчас самое сильное?")
     await state.set_state(OARS.waiting_emotion)
@@ -274,6 +288,10 @@ async def process_situation(message: types.Message, state: FSMContext):
 
 @dp.message(OARS.waiting_emotion)
 async def process_emotion(message: types.Message, state: FSMContext):
+    if message.text.strip().lower() in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
     db.save_user_answer(message.from_user.id, "Эмоции", message.text)
     await message.answer("Где в теле ты ощущаешь эту эмоцию? (например, ком в горле, тяжесть в груди)")
     await state.set_state(OARS.waiting_body)
@@ -281,6 +299,10 @@ async def process_emotion(message: types.Message, state: FSMContext):
 
 @dp.message(OARS.waiting_body)
 async def process_body(message: types.Message, state: FSMContext):
+    if message.text.strip().lower() in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
     db.save_user_answer(message.from_user.id, "Тело", message.text)
     await message.answer("Какая мысль крутится у тебя в голове чаще всего?")
     await state.set_state(OARS.waiting_thought)
@@ -288,6 +310,10 @@ async def process_body(message: types.Message, state: FSMContext):
 
 @dp.message(OARS.waiting_thought)
 async def process_thought(message: types.Message, state: FSMContext):
+    if message.text.strip().lower() in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
     db.save_user_answer(message.from_user.id, "Мысли", message.text)
     await message.answer("Что ты делаешь, когда становится совсем тяжело? (например, залипаешь в соцсетях, ешь, плачешь)")
     await state.set_state(OARS.waiting_behavior)
@@ -295,6 +321,10 @@ async def process_thought(message: types.Message, state: FSMContext):
 
 @dp.message(OARS.waiting_behavior)
 async def process_behavior(message: types.Message, state: FSMContext):
+    if message.text.strip().lower() in ("нет", "назад", "меню", "не хочу", "выйти", "отмена"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
     db.save_user_answer(message.from_user.id, "Поведение", message.text)
     story = db.get_user_story(message.from_user.id)
     summary = "Вот что я услышал:\n"
@@ -321,9 +351,12 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         )
         db.clear_user_story(message.from_user.id)
         await state.clear()
-    else:
+    elif message.text.lower().strip().startswith("нет"):
         await message.answer("Давай уточним. Расскажи ещё раз, что произошло.")
         await state.set_state(OARS.waiting_situation)
+    else:
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
 
 
 # ===== DEEP ANALYSIS FROM MENU =====
@@ -574,6 +607,18 @@ def compute_score(tid, answers):
     return 0, None
 
 
+def das_level(score, norms):
+    for label, lo, hi in norms:
+        if lo <= score <= hi:
+            return label
+    return norms[-1][0]
+
+_DASS_NORMS = {
+    "D": [("норма", 0, 9), ("лёгкая", 10, 13), ("умеренная", 14, 20), ("тяжёлая", 21, 27), ("очень тяжёлая", 28, 42)],
+    "A": [("норма", 0, 7), ("лёгкая", 8, 9), ("умеренная", 10, 14), ("тяжёлая", 15, 19), ("очень тяжёлая", 20, 42)],
+    "S": [("норма", 0, 14), ("лёгкая", 15, 18), ("умеренная", 19, 25), ("тяжёлая", 26, 33), ("очень тяжёлая", 34, 42)],
+}
+
 async def finish_test(msg, uid):
     sess = _test_sessions.pop(uid, None)
     if not sess:
@@ -582,13 +627,21 @@ async def finish_test(msg, uid):
 
     if sess["tid"] == "dass21":
         d, a, s = sub["D"], sub["A"], sub["S"]
+        dl = das_level(d, _DASS_NORMS["D"])
+        al = das_level(a, _DASS_NORMS["A"])
+        sl = das_level(s, _DASS_NORMS["S"])
         text = (
             f"📊 **DASS-21 завершён!**\n\n"
-            f"• Депрессия (D): **{d}** {'☀️' if d <= 9 else '🌤️' if d <= 13 else '⛅' if d <= 20 else '🌧️'}\n"
-            f"• Тревога (A): **{a}** {'☀️' if a <= 7 else '🌤️' if a <= 9 else '⛅' if a <= 14 else '🌧️'}\n"
-            f"• Стресс (S): **{s}** {'☀️' if s <= 14 else '🌤️' if s <= 18 else '⛅' if s <= 25 else '🌧️'}\n\n"
-            f"Нормы: D≤9, A≤7, S≤14 — норма. Выше — требуется внимание.\n"
-            "⚠️ Это скрининг, не диагноз."
+            f"**Депрессия (D):** {d} баллов — *{dl}*\n"
+            f"  Вопросы: 3, 5, 10, 13, 16, 17, 21\n"
+            f"  Норма: 0-9 | Лёгкая: 10-13 | Умеренная: 14-20 | Тяжёлая: 21+ | Оч. тяжёлая: 28+\n\n"
+            f"**Тревога (A):** {a} баллов — *{al}*\n"
+            f"  Вопросы: 2, 4, 7, 9, 15, 19, 20\n"
+            f"  Норма: 0-7 | Лёгкая: 8-9 | Умеренная: 10-14 | Тяжёлая: 15+ | Оч. тяжёлая: 20+\n\n"
+            f"**Стресс (S):** {s} баллов — *{sl}*\n"
+            f"  Вопросы: 1, 6, 8, 11, 12, 14, 18\n"
+            f"  Норма: 0-14 | Лёгкая: 15-18 | Умеренная: 19-25 | Тяжёлая: 26+ | Оч. тяжёлая: 34+\n\n"
+            f"⚠️ Это скрининг, не диагноз. Результаты выше нормы — повод обратиться к специалисту."
         )
     else:
         level = test_level(score, sess["levels"])
@@ -602,22 +655,40 @@ async def finish_test(msg, uid):
 
 # ===== LUSCHER TEST =====
 async def start_luscher(callback: types.CallbackQuery):
-    _test_sessions[callback.from_user.id] = {"tid": "luscher", "picked": [], "step": 0}
+    _test_sessions[callback.from_user.id] = {"tid": "luscher", "round": 1, "step": 0, "picked": [], "order1": [], "order2": []}
     await callback.answer()
     await show_luscher_colors(callback.message, callback.from_user.id)
 
 
 async def show_luscher_colors(msg, uid):
     sess = _test_sessions.get(uid)
-    if not sess or sess["step"] >= len(LUSCHER_COLORS):
-        await finish_luscher(msg, uid)
+    if not sess:
         return
+    if sess["step"] >= len(LUSCHER_COLORS):
+        # current round complete
+        if sess["round"] == 1:
+            sess["order1"] = sess["picked"][:]
+            sess["round"] = 2
+            sess["step"] = 0
+            sess["picked"] = []
+            import random
+            shuffled = list(range(8))
+            random.shuffle(shuffled)
+            sess["shuffle"] = shuffled
+            text = "🎨 **Тест Люшера — 2-й раунд**\n\nТеперь выбери цвета снова. Не старайся вспомнить предыдущий выбор — доверься первому впечатлению.\n\n"
+            remaining = [(i, LUSCHER_COLORS[i][0], LUSCHER_COLORS[i][1]) for i in shuffled]
+            buttons = [[InlineKeyboardButton(text=f"{emoji} {name}", callback_data=f"lusch_pick_{i}")] for i, emoji, name in remaining]
+            await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
+        else:
+            await finish_luscher(msg, uid)
+        return
+
     step = sess["step"]
-    remaining = [(i, emoji, name) for i, (emoji, name) in enumerate(LUSCHER_COLORS) if i not in sess["picked"]]
-    text = f"🎨 **Тест Люшера**\n\nВыбери **{step+1}-й** цвет (самый приятный из оставшихся):\n\n"
-    picked_emojis = [f"{LUSCHER_COLORS[i][0]} " + ("★" if pos == 0 else f"({pos+1})") for pos, i in enumerate(sess["picked"])]
-    if picked_emojis:
-        text += "Уже выбрано: " + ", ".join(picked_emojis) + "\n\n"
+    remaining = [(i, LUSCHER_COLORS[i][0], LUSCHER_COLORS[i][1]) for i in (range(8) if sess["round"] == 1 else sess.get("shuffle", range(8))) if i not in sess["picked"]]
+    text = f"🎨 **Тест Люшера{' — 2-й раунд' if sess['round'] == 2 else ''}**\n\nВыбери **{step+1}-й** цвет (самый приятный из оставшихся):\n\n"
+    if sess["picked"]:
+        picked_str = ", ".join(f"{LUSCHER_COLORS[i][0]}({p+1})" for p, i in enumerate(sess["picked"]))
+        text += f"Уже выбрано: {picked_str}\n\n"
     buttons = [[InlineKeyboardButton(text=f"{emoji} {name}", callback_data=f"lusch_pick_{i}")] for i, emoji, name in remaining]
     await msg.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
 
@@ -640,46 +711,60 @@ async def finish_luscher(msg, uid):
     sess = _test_sessions.pop(uid, None)
     if not sess:
         return
-    order = sess["picked"]
-    pos = {c: i for i, c in enumerate(order)}  # color_idx -> position
-    primary_names = {0: "Красный", 1: "Жёлтый", 2: "Зелёный", 3: "Синий"}
-    extra_names = {4: "Фиолетовый", 5: "Коричневый", 6: "Серый", 7: "Чёрный"}
-    text = "🎨 **Тест Люшера завершён!**\n\nТвой порядок выбора:\n"
-    for i, c in enumerate(order):
-        emoji, name = LUSCHER_COLORS[c]
-        text += f"{i+1}. {emoji} {name}\n"
+    order1 = sess["order1"]
+    order2 = sess["picked"]
+    pos1 = {c: i for i, c in enumerate(order1)}
+    pos2 = {c: i for i, c in enumerate(order2)}
 
-    text += "\n**Упрощённая интерпретация:**\n"
-    prim_ok = sum(1 for c in order[:4] if c < 4)
-    prim_late = sum(1 for c in order[4:] if c < 4)
-    extra_early = sum(1 for c in order[:4] if c >= 4)
+    text = "🎨 **Тест Люшера завершён!**\n\n"
+    text += "**1-й раунд:**\n"
+    for i, c in enumerate(order1):
+        text += f"  {i+1}. {LUSCHER_COLORS[c][0]} {LUSCHER_COLORS[c][1]}\n"
+    text += "\n**2-й раунд:**\n"
+    for i, c in enumerate(order2):
+        text += f"  {i+1}. {LUSCHER_COLORS[c][0]} {LUSCHER_COLORS[c][1]}\n"
 
-    if prim_ok >= 3:
-        text += "✅ Основные цвета (красный, жёлтый, зелёный, синий) в начале — хороший признак эмоционального равновесия.\n"
-    elif prim_ok >= 1:
-        text += "⚠️ Часть основных цветов сдвинута в конец — возможна тревога или подавленность.\n"
+    text += "\n**Интерпретация:**\n"
+    primary = {0, 1, 2, 3}
+    stable = [c for c in range(8) if abs(pos1.get(c, 8) - pos2.get(c, 8)) <= 1]
+    unstable = [c for c in range(8) if abs(pos1.get(c, 8) - pos2.get(c, 8)) >= 3]
+    prim_first = sum(1 for c in range(4) if pos1.get(c, 8) < 4 and pos2.get(c, 8) < 4)
+    prim_last = sum(1 for c in range(4) if pos1.get(c, 8) >= 4 and pos2.get(c, 8) >= 4)
+
+    if prim_first >= 3:
+        text += "✅ Основные цвета (красный, жёлтый, зелёный, синий) в начале в обоих раундах — эмоциональное равновесие.\n"
+    elif prim_first >= 1:
+        text += "⚠️ Часть основных цветов в начале — есть ресурс, но нестабильность.\n"
     else:
-        text += "🔴 Основные цвета в конце — возможен высокий уровень стресса или усталости.\n"
+        text += "🔴 Основные цвета в конце в обоих раундах — возможен стресс или подавленность.\n"
 
-    if prim_late >= 3:
-        text += "🔴 Почти все базовые цвета отвергнуты — стоит обратить внимание на эмоциональное состояние.\n"
+    if len(stable) >= 5:
+        text += "📌 Много стабильных выборов — у тебя есть устойчивые ценности и потребности.\n"
+    elif len(stable) >= 3:
+        text += "📌 Умеренная стабильность — часть потребностей осознана.\n"
+    else:
+        text += "📌 Мало стабильных выборов — возможна внутренняя растерянность.\n"
 
-    if extra_early >= 2:
-        text += "⚪ Дополнительные цвета в начале — может быть потребность в покое или избегании.\n"
+    if len(unstable) >= 3:
+        text += "🔀 Значительные колебания между раундами — внутренний конфликт, неопределённость.\n"
 
-    if order[0] == 2:
-        text += "🟢 Зелёный на первом месте — потребность в уверенности и стабильности.\n"
-    elif order[0] == 0:
-        text += "🔴 Красный на первом месте — активность, потребность в действии.\n"
-    elif order[0] == 3:
-        text += "🔵 Синий на первом месте — потребность в покое и гармонии.\n"
-    elif order[0] == 1:
-        text += "🟡 Жёлтый на первом месте — потребность в радости и переменах.\n"
+    for c in stable:
+        if c == 3:
+            text += "🔵 Синий стабилен — потребность в покое и гармонии.\n"
+        elif c == 0:
+            text += "🔴 Красный стабилен — уверенность, активность.\n"
+        elif c == 2:
+            text += "🟢 Зелёный стабилен — потребность в самоутверждении.\n"
+        elif c == 1:
+            text += "🟡 Жёлтый стабилен — потребность в радости и развитии.\n"
 
-    if order[-1] == 7:
-        text += "⬛ Чёрный на последнем месте — неприятие пустоты, надежда на изменения.\n"
-    elif order[-1] == 6:
-        text += "⬜ Серый на последнем месте — нежелание отгораживаться от мира.\n"
+    for c in unstable:
+        if c == 7:
+            text += "⬛ Чёрный нестабилен — борьба с отрицанием или страхом.\n"
+        elif c == 4:
+            text += "🟣 Фиолетовый нестабилен — колебания между чувствительностью и рациональностью.\n"
+        elif c == 6:
+            text += "⬜ Серый нестабилен — желание отгородиться vs потребность в контакте.\n"
 
     text += "\n*⚠️ Упрощённая трактовка. Полный тест Люшера проводится специалистом.*"
     await msg.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
