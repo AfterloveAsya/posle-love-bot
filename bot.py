@@ -831,13 +831,14 @@ async def schema_menu(callback: types.CallbackQuery):
 async def schema_det(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["det"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_det_{name}")]
-            for name in cat["modes"].keys()
+            [InlineKeyboardButton(text=name, callback_data=f"lsc:det:{i}")]
+            for i, (name, _) in enumerate(modes)
         ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
     )
-    for name, desc in cat["modes"].items():
+    for name, desc in modes:
         text += f"**{name}** — {desc}\n\n"
     await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
@@ -847,13 +848,14 @@ async def schema_det(callback: types.CallbackQuery):
 async def schema_cop(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["cop"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_cop_{name}")]
-            for name in cat["modes"].keys()
+            [InlineKeyboardButton(text=name, callback_data=f"lsc:cop:{i}")]
+            for i, (name, _) in enumerate(modes)
         ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
     )
-    for name, desc in cat["modes"].items():
+    for name, desc in modes:
         text += f"**{name}** — {desc}\n\n"
     await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
@@ -863,35 +865,38 @@ async def schema_cop(callback: types.CallbackQuery):
 async def schema_health(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["health"]
     text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=name, callback_data=f"lib_schema_show_health_{name}")]
-            for name in cat["modes"].keys()
+            [InlineKeyboardButton(text=name, callback_data=f"lsc:health:{i}")]
+            for i, (name, _) in enumerate(modes)
         ] + [[InlineKeyboardButton(text="🔙 К группам", callback_data="lib_schema")]]
     )
-    for name, desc in cat["modes"].items():
+    for name, desc in modes:
         text += f"**{name}** — {desc}\n\n"
     await callback.message.edit_text(text.strip(), reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
-@dp.callback_query(F.data.startswith("lib_schema_show_"))
+@dp.callback_query(F.data.startswith("lsc:"))
 async def schema_show_mode(callback: types.CallbackQuery):
-    parts = callback.data.split("_", 4)
-    cat_key = parts[3]
-    mode_name = parts[4]
+    _, cat_key, idx = callback.data.split(":", 2)
     cat = SCHEMA_CATEGORIES.get(cat_key)
-    if cat and mode_name in cat["modes"]:
-        content = f"🧠 **{mode_name}**\n\n{cat['modes'][mode_name]}"
-    else:
-        content = "Режим не найден."
-    await callback.message.edit_text(
-        content,
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔙 Назад", callback_data=f"lib_schema_{cat_key}")]
-        ]), parse_mode="Markdown"
-    )
-    await callback.answer()
+    if cat:
+        modes = list(cat["modes"].items())
+        idx = int(idx)
+        if 0 <= idx < len(modes):
+            mode_name, mode_desc = modes[idx]
+            content = f"🧠 **{mode_name}**\n\n{mode_desc}"
+            await callback.message.edit_text(
+                content,
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔙 Назад", callback_data=f"lib_schema_{cat_key}")]
+                ]), parse_mode="Markdown"
+            )
+            await callback.answer()
+            return
+    await callback.answer("Режим не найден.", show_alert=True)
 
 
 @dp.callback_query(F.data.startswith("lib_"))
