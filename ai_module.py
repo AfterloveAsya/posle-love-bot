@@ -65,11 +65,11 @@ async def expert_analysis(user_story: list) -> str:
             {"role": "user", "content": f"История клиента:\n{context}"}
         ],
         "temperature": 0.7,
-        "max_tokens": 400
+        "max_tokens": 1000
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=25) as resp:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=30) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
                     logging.error(f"OpenRouter error {resp.status}: {error_text}")
