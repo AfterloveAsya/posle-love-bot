@@ -4,10 +4,12 @@ from datetime import datetime, timedelta
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "bot_data.db")
 
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
 
 def init_db():
     conn = get_connection()
@@ -38,12 +40,12 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             entry TEXT,
-            analysis TEXT,
             timestamp TEXT
         )
     ''')
     conn.commit()
     conn.close()
+
 
 def save_diagnosis(user_id: int, state: str, score: int):
     conn = get_connection()
@@ -60,13 +62,15 @@ def save_diagnosis(user_id: int, state: str, score: int):
     conn.commit()
     conn.close()
 
+
 def get_user_state(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT state, score, updated_at, is_premium, morning_hour, evening_hour FROM users WHERE user_id = ?', (user_id,))
+    cursor.execute('SELECT state, score, updated_at, is_premium FROM users WHERE user_id = ?', (user_id,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
 
 def save_user_answer(user_id: int, question: str, answer: str):
     conn = get_connection()
@@ -76,6 +80,7 @@ def save_user_answer(user_id: int, question: str, answer: str):
     conn.commit()
     conn.close()
 
+
 def get_user_story(user_id: int) -> list:
     conn = get_connection()
     cursor = conn.cursor()
@@ -84,12 +89,14 @@ def get_user_story(user_id: int) -> list:
     conn.close()
     return [{"q": row["question"], "a": row["answer"]} for row in rows]
 
+
 def clear_user_story(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('DELETE FROM user_story WHERE user_id = ?', (user_id,))
     conn.commit()
     conn.close()
+
 
 def activate_premium(user_id: int, days: int = 365):
     conn = get_connection()
@@ -98,6 +105,7 @@ def activate_premium(user_id: int, days: int = 365):
     cursor.execute('UPDATE users SET is_premium = 1, premium_until = ? WHERE user_id = ?', (until, user_id))
     conn.commit()
     conn.close()
+
 
 def is_premium(user_id: int) -> bool:
     conn = get_connection()
@@ -110,12 +118,14 @@ def is_premium(user_id: int) -> bool:
             return True
     return False
 
+
 def set_user_time(user_id: int, morning: int, evening: int):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('UPDATE users SET morning_hour = ?, evening_hour = ? WHERE user_id = ?', (morning, evening, user_id))
     conn.commit()
     conn.close()
+
 
 def get_all_users_with_times():
     conn = get_connection()
@@ -125,19 +135,20 @@ def get_all_users_with_times():
     conn.close()
     return rows
 
-def save_diary_entry(user_id: int, entry: str, analysis: str = ""):
+
+def save_diary_entry(user_id: int, entry: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO diary (user_id, entry, analysis, timestamp) VALUES (?, ?, ?, ?)',
-                   (user_id, entry, analysis, datetime.now().isoformat()))
+    cursor.execute('INSERT INTO diary (user_id, entry, timestamp) VALUES (?, ?, ?)',
+                   (user_id, entry, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
-def get_last_entries(user_id: int, limit: int = 5):
+
+def get_last_entries(user_id: int, limit: int = 3):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT entry, analysis, timestamp FROM diary WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?',
-                   (user_id, limit))
+    cursor.execute('SELECT entry FROM diary WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?', (user_id, limit))
     rows = cursor.fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    return [row["entry"] for row in reversed(rows)]
