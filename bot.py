@@ -471,7 +471,7 @@ async def cmd_activate(message: types.Message):
         await message.answer("Использование: /activate user_id [days]")
 
 # ===== DIARY ENTRY (catch-all) =====
-@dp.message()
+@dp.message(F.text)
 async def diary_entry(message: types.Message, state: FSMContext):
     current_state = await state.get_state()
     if current_state is not None:
