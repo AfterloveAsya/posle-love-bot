@@ -416,23 +416,48 @@ async def set_time(callback: types.CallbackQuery):
     await callback.answer()
 
 # ===== SUBSCRIBE / PAYMENT =====
+subscribe_kb = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="⭐ Годовая — 2990 Stars", callback_data="pay_annual")],
+        [InlineKeyboardButton(text="⭐ Месячная — 499 Stars", callback_data="pay_monthly")],
+        [InlineKeyboardButton(text="🔙 Назад", callback_data="settings")]
+    ]
+)
+
 @dp.callback_query(F.data == "subscribe")
 async def subscribe_info(callback: types.CallbackQuery):
     if db.is_premium(callback.from_user.id):
         await callback.message.edit_text("✅ У тебя активна Premium-подписка. Спасибо, что ты с нами!", reply_markup=back_to_menu_kb)
         await callback.answer()
         return
+    await callback.message.edit_text("💎 **Premium-подписка**\n\nВыбери тариф:", reply_markup=subscribe_kb, parse_mode="Markdown")
+    await callback.answer()
 
-    prices = [LabeledPrice(label="Годовая подписка Premium", amount=2990)]
+@dp.callback_query(F.data == "pay_annual")
+async def pay_annual(callback: types.CallbackQuery):
+    prices = [LabeledPrice(label="Годовая Premium", amount=2990)]
     await bot.send_invoice(
         chat_id=callback.from_user.id,
         title="Подписка «После любви»",
-        description="Premium-доступ: персональные задания, AI-анализ, настройка времени.",
-        payload="premium_subscription",
+        description="Premium на год: персональные задания, AI-анализ, настройка времени.",
+        payload="premium_annual",
         provider_token="",
         currency="XTR",
-        prices=prices,
-        start_parameter="premium"
+        prices=prices
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "pay_monthly")
+async def pay_monthly(callback: types.CallbackQuery):
+    prices = [LabeledPrice(label="Месячная Premium", amount=499)]
+    await bot.send_invoice(
+        chat_id=callback.from_user.id,
+        title="Подписка «После любви»",
+        description="Premium на месяц: персональные задания, AI-анализ, настройка времени.",
+        payload="premium_monthly",
+        provider_token="",
+        currency="XTR",
+        prices=prices
     )
     await callback.answer()
 
@@ -442,11 +467,13 @@ async def checkout_process(pre_checkout_query: PreCheckoutQuery):
 
 @dp.message(F.successful_payment)
 async def successful_payment(message: types.Message):
-    if message.successful_payment.invoice_payload == "premium_subscription":
-        amount = message.successful_payment.total_amount
-        days = 365 if amount == 2990 else 30
-        db.activate_premium(message.from_user.id, days)
-        await message.answer("🎉 Твоя Premium-подписка активирована! Теперь тебе доступны все возможности.", reply_markup=main_menu_kb)
+    payload = message.successful_payment.invoice_payload
+    if payload == "premium_annual":
+        db.activate_premium(message.from_user.id, 365)
+        await message.answer("🎉 Годовая Premium активирована! Спасибо за доверие.", reply_markup=main_menu_kb)
+    elif payload == "premium_monthly":
+        db.activate_premium(message.from_user.id, 30)
+        await message.answer("🎉 Месячная Premium активирована! Все возможности доступны.", reply_markup=main_menu_kb)
 
 # ===== DIARY ENTRY (catch-all) =====
 @dp.message()
