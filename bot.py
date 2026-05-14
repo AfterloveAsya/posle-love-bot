@@ -352,8 +352,8 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         db.clear_user_story(message.from_user.id)
         await state.clear()
     elif message.text.lower().strip().startswith("нет"):
-        await message.answer("Давай уточним. Расскажи ещё раз, что произошло.")
-        await state.set_state(OARS.waiting_situation)
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
     else:
         await state.clear()
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
