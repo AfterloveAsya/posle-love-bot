@@ -43,6 +43,16 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            analysis TEXT,
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -152,3 +162,21 @@ def get_last_entries(user_id: int, limit: int = 3):
     rows = cursor.fetchall()
     conn.close()
     return [row["entry"] for row in reversed(rows)]
+
+
+def save_analysis(user_id: int, state: str, score: int, analysis: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO user_analysis (user_id, state, score, analysis, timestamp) VALUES (?, ?, ?, ?, ?)',
+                   (user_id, state, score, analysis, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_last_analysis(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, analysis, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None

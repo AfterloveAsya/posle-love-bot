@@ -43,6 +43,7 @@ main_menu_kb = InlineKeyboardMarkup(
         [InlineKeyboardButton(text="📋 Сегодняшнее задание", callback_data="task")],
         [InlineKeyboardButton(text="📓 Дневник", callback_data="diary")],
         [InlineKeyboardButton(text="📊 Моё состояние", callback_data="my_state")],
+        [InlineKeyboardButton(text="📋 Мои разборы", callback_data="my_analysis")],
         [InlineKeyboardButton(text="🔍 Углублённый разбор", callback_data="deep_analysis")],
         [InlineKeyboardButton(text="📚 Библиотека техник", callback_data="library")],
         [InlineKeyboardButton(text="🆘 Кризисная помощь", callback_data="crisis")],
@@ -288,6 +289,13 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         story = db.get_user_story(message.from_user.id)
         analysis = await ai_module.expert_analysis(story)
         await message.answer(analysis, reply_markup=main_menu_kb)
+        user_state = db.get_user_state(message.from_user.id)
+        db.save_analysis(
+            user_id=message.from_user.id,
+            state=user_state["state"] if user_state else "стабилизация",
+            score=user_state["score"] if user_state else 0,
+            analysis=analysis
+        )
         db.clear_user_story(message.from_user.id)
         await state.clear()
     else:
@@ -304,7 +312,13 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
         return
     db.clear_user_story(callback.from_user.id)
-    await callback.message.answer("Давай глубже. Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?")
+    await callback.message.answer(
+        "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
+        "Я буду задавать тебе вопросы, и мы будем углубляться в твою ситуацию: "
+        "разберём триггеры, детские травмы, формат отношений, паттерны зависимости. "
+        "В конце ты получишь полный разбор.\n\n"
+        "Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
+    )
     await state.set_state(OARS.waiting_situation)
     await callback.answer()
 
@@ -354,6 +368,28 @@ async def show_my_state(callback: types.CallbackQuery):
     await callback.answer()
 
 
+@dp.callback_query(F.data == "my_analysis")
+async def show_my_analysis(callback: types.CallbackQuery):
+    analysis = db.get_last_analysis(callback.from_user.id)
+    if not analysis:
+        await callback.message.edit_text(
+            "У тебя пока нет сохранённых разборов. Пройди диагностику и ответь на вопросы, чтобы получить экспертный анализ.",
+            reply_markup=back_to_menu_kb
+        )
+        await callback.answer()
+        return
+    date = analysis["timestamp"][:10]
+    state_name = analysis["state"].capitalize()
+    text = (
+        f"📋 **Твой последний разбор**\n"
+        f"Состояние: **{state_name}**\n"
+        f"Дата: {date}\n\n"
+        f"{analysis['analysis']}"
+    )
+    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+    await callback.answer()
+
+
 @dp.callback_query(F.data == "task")
 async def show_task(callback: types.CallbackQuery):
     user_data = db.get_user_state(callback.from_user.id)
@@ -389,13 +425,12 @@ async def diary_write(callback: types.CallbackQuery):
 
 @dp.callback_query(F.data == "diary_history")
 async def diary_history(callback: types.CallbackQuery):
-    entries = db.get_last_entries(callback.from_user.id)
+    entries = db.get_last_entries(callback.from_user.id, limit=5)
     if not entries:
         text = "У тебя пока нет записей. Напиши что-нибудь в дневник!"
     else:
-        # get_last_entries returns list of strings; show last 5
         lines = []
-        for i, e in enumerate(entries[-5:], 1):
+        for i, e in enumerate(entries, 1):
             preview = e[:80] + "..." if len(e) > 80 else e
             lines.append(f"**{i}.** {preview}")
         text = "📖 **Мои записи:**\n\n" + "\n\n".join(lines)
@@ -458,7 +493,7 @@ async def subscribe_info(callback: types.CallbackQuery):
 
     pay_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="💳 Оплатить 499₽ (месяц)", url="https://business.tbank.ru/invoices/api/v1/public/document/U4wLoZ06ajfAeZIUBIZAzRIZjpzy70Njj3tSyayZjNnN6WfIa2?nonce=XoBRhbT4")],
+            [InlineKeyboardButton(text="💳 Оплатить 499₽ (месяц)", url="https://b2b.cbrpay.ru/AS1B001960PEAB7E8EURMBD7NVIK1JBJ")],
             [InlineKeyboardButton(text="💳 Оплатить 2990₽ (год)", url="https://b2b.cbrpay.ru/BS1B000S6GJK30P18TFPD4AC31QUTHUU")],
             [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data="confirm_payment")],
             [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]
@@ -507,12 +542,56 @@ async def cmd_activate(message: types.Message):
 # ===== LIBRARY =====
 LIBRARY = {
     "Внутренний Ребёнок": (
-        "В схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит детские боли.\n\n"
+        "В схема-терапии есть понятие «Уязвимый Ребёнок» — часть нас, которая хранит детские боли, "
+        "одиночество и потребность в заботе. Он активируется, когда мы чувствуем себя покинутыми.\n\n"
         "🧸 **Как работать:**\n"
         "• Представь себя в детстве. Что бы ты хотел(а) услышать?\n"
         "• Напиши письмо себе-ребёнку со словами поддержки\n"
         "• Положи руку на сердце и скажи: «Я с тобой»\n\n"
         "📌 **Практика:** закрой глаза, вспомни себя в 5-7 лет. Мысленно обними этого ребёнка."
+    ),
+    "Карающий Родитель": (
+        "Внутренний критик, который ругает за ошибки, стыдит и не даёт покоя. "
+        "Часто это интроецированный голос значимого взрослого из детства.\n\n"
+        "🎯 **Техника:**\n"
+        "• Заметь его голос и скажи «Стоп»\n"
+        "• Дай ему смешное имя (например, «Ворчун»)\n"
+        "• Ответь ему с позиции взрослого: «Я делаю всё, что могу»\n\n"
+        "📌 **Вопрос себе:** Чей это голос на самом деле? Что бы я сказал(а) другу в такой ситуации?"
+    ),
+    "Отстранённый Защитник": (
+        "Режим, в котором мы отключаемся от эмоций, чтобы не чувствовать боль. "
+        "Проявляется как избегание, диссоциация, уход в фантазии или интеллектуализацию.\n\n"
+        "🔍 **Признаки:**\n"
+        "• «Мне всё равно»\n"
+        "• Я просто наблюдаю со стороны\n"
+        "• Эмоции кажутся нереальными\n\n"
+        "🧘 **Как вернуться в тело:**\n"
+        "• Техники заземления (5-4-3-2-1)\n"
+        "• Заметь: «Я сейчас отстраняюсь. Это защита»\n"
+        "• Медленное дыхание с акцентом на выдох"
+    ),
+    "Агрессивный Защитник": (
+        "Режим, в котором мы нападаем, чтобы защититься от уязвимости. "
+        "Проявляется как гнев, критика других, контроль, импульсивность.\n\n"
+        "🔥 **Признаки:**\n"
+        "• Вспышки гнева\n"
+        "• Желание контролировать\n"
+        "• Обесценивание других\n\n"
+        "💡 **Что делать:**\n"
+        "• Пауза: посчитай до 10, прежде чем реагировать\n"
+        "• Спроси себя: «Что я на самом деле сейчас чувствую?»\n"
+        "• Направь энергию в движение (физическая активность)"
+    ),
+    "Здоровый Взрослый": (
+        "Целевой режим — часть нас, которая способна заботиться, устанавливать границы, "
+        "принимать решения и быть в контакте с реальностью.\n\n"
+        "🌟 **Как укреплять:**\n"
+        "• Регулярная самоподдержка: «Я справлюсь»\n"
+        "• Забота о своих потребностях (сон, еда, отдых)\n"
+        "• Установление здоровых границ\n"
+        "• Признание своих чувств без осуждения\n\n"
+        "📌 **Практика:** Каждый вечер записывай 1 решение, которое ты принял(а) как взрослый человек."
     ),
     "Заземление": (
         "Техники, которые возвращают в «здесь и сейчас» при тревоге:\n\n"
@@ -528,19 +607,14 @@ LIBRARY = {
         "🔄 **Смена перспективы:** «Что бы я сказал(а) другу в такой ситуации?»\n\n"
         "💬 **Аффирмации:** «Я имею право на свои чувства», «Я ценен/ценна сам(а) по себе»."
     ),
-    "Карающий Родитель": (
-        "Внутренний критик, который ругает за ошибки и не даёт покоя.\n\n"
-        "🎯 **Техника:**\n"
-        "• Заметь его голос и скажи «Стоп»\n"
-        "• Дай ему смешное имя (например, «Ворчун»)\n"
-        "• Ответь ему с позиции взрослого: «Я делаю всё, что могу»"
-    ),
     "Управление триггерами": (
-        "Триггер — стимул, вызывающий острую эмоциональную реакцию.\n\n"
+        "Триггер — стимул, вызывающий острую эмоциональную реакцию (напоминание о бывшем, "
+        "место, запах, дата).\n\n"
         "📝 **Упражнение:**\n"
         "• Составь список своих триггеров\n"
         "• Для каждого придумай план безопасности\n"
-        "• В момент триггера сначала дыши, потом действуй"
+        "• В момент триггера сначала дыши, потом действуй\n\n"
+        "💡 **Помни:** триггер — это не опасность, это сигнал. Ты в безопасности сейчас."
     ),
 }
 
