@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -215,31 +215,31 @@ async def process_diag_answer(callback: types.CallbackQuery, state: FSMContext):
     await ask_next_question(callback.message, state)
 
 # ===== OARS DIALOG =====
-@dp.message(OARS.waiting_situation)
+@dp.message(StateFilter(OARS.waiting_situation))
 async def process_situation(message: types.Message, state: FSMContext):
     db.save_user_answer(message.from_user.id, "Ситуация", message.text)
     await message.answer("Какое чувство сейчас самое сильное?")
     await state.set_state(OARS.waiting_emotion)
 
-@dp.message(OARS.waiting_emotion)
+@dp.message(StateFilter(OARS.waiting_emotion))
 async def process_emotion(message: types.Message, state: FSMContext):
     db.save_user_answer(message.from_user.id, "Эмоции", message.text)
     await message.answer("Где в теле ты ощущаешь эту эмоцию? (например, ком в горле, тяжесть в груди)")
     await state.set_state(OARS.waiting_body)
 
-@dp.message(OARS.waiting_body)
+@dp.message(StateFilter(OARS.waiting_body))
 async def process_body(message: types.Message, state: FSMContext):
     db.save_user_answer(message.from_user.id, "Тело", message.text)
     await message.answer("Какая мысль крутится у тебя в голове чаще всего?")
     await state.set_state(OARS.waiting_thought)
 
-@dp.message(OARS.waiting_thought)
+@dp.message(StateFilter(OARS.waiting_thought))
 async def process_thought(message: types.Message, state: FSMContext):
     db.save_user_answer(message.from_user.id, "Мысли", message.text)
     await message.answer("Что ты делаешь, когда становится совсем тяжело? (например, залипаешь в соцсетях, ешь, плачешь)")
     await state.set_state(OARS.waiting_behavior)
 
-@dp.message(OARS.waiting_behavior)
+@dp.message(StateFilter(OARS.waiting_behavior))
 async def process_behavior(message: types.Message, state: FSMContext):
     db.save_user_answer(message.from_user.id, "Поведение", message.text)
     story = db.get_user_story(message.from_user.id)
@@ -250,7 +250,7 @@ async def process_behavior(message: types.Message, state: FSMContext):
     await message.answer(summary)
     await state.set_state(OARS.waiting_confirmation)
 
-@dp.message(OARS.waiting_confirmation)
+@dp.message(StateFilter(OARS.waiting_confirmation))
 async def process_confirmation(message: types.Message, state: FSMContext):
     if message.text.lower().startswith("да"):
         await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
