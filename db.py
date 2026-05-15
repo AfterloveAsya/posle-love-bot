@@ -106,10 +106,15 @@ def clear_user_story(user_id: int):
 def activate_premium(user_id: int, days: int = 365):
     conn = get_connection()
     cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return False
     until = (datetime.now() + timedelta(days=days)).isoformat()
     cursor.execute('UPDATE users SET is_premium = 1, premium_until = ? WHERE user_id = ?', (until, user_id))
     conn.commit()
     conn.close()
+    return True
 
 
 def is_premium(user_id: int) -> bool:
@@ -119,15 +124,24 @@ def is_premium(user_id: int) -> bool:
     row = cursor.fetchone()
     conn.close()
     if row and row["is_premium"]:
-        if datetime.fromisoformat(row["premium_until"]) > datetime.now():
-            return True
+        try:
+            if datetime.fromisoformat(row["premium_until"]) > datetime.now():
+                return True
+        except (ValueError, TypeError):
+            return False
     return False
 
 
 def set_user_time(user_id: int, morning: int, evening: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('UPDATE users SET morning_hour = ?, evening_hour = ? WHERE user_id = ?', (morning, evening, user_id))
+    cursor.execute('''
+        INSERT INTO users (user_id, morning_hour, evening_hour)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            morning_hour = excluded.morning_hour,
+            evening_hour = excluded.evening_hour
+    ''', (user_id, morning, evening))
     conn.commit()
     conn.close()
 

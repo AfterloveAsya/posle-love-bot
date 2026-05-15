@@ -45,7 +45,13 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
-    user_content = text
+    parts = []
+    if history:
+        history_lines = "\n".join(f"- {h}" for h in history if isinstance(h, str))
+        if history_lines:
+            parts.append(f"Предыдущие записи клиента:\n{history_lines}")
+    parts.append(text)
+    user_content = "\n\n".join(parts)
     if username:
         user_content += f"\n\nКлиента зовут {username}."
     payload = {

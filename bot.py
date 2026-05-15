@@ -415,9 +415,17 @@ async def show_my_state(callback: types.CallbackQuery):
         await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=kb)
     else:
         emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
-        user_state = user_data["state"]
-        total = user_data["score"]
-        updated = user_data["updated_at"][:10]
+        user_state = user_data.get("state")
+        if not user_state:
+            tb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Пройти диагностику", callback_data="start_diagnosis")],
+                [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+            ])
+            await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=tb)
+            await callback.answer()
+            return
+        total = user_data["score"] or 0
+        updated = user_data.get("updated_at", "")[:10] if user_data.get("updated_at") else "—"
         level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
         progress_bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
         premium = "⭐ Premium" if db.is_premium(callback.from_user.id) else "—"
@@ -960,9 +968,14 @@ async def cmd_activate(message: types.Message):
         return
     try:
         user_id = int(message.text.split()[1])
-        db.activate_premium(user_id, days=365)
-        await message.answer(f"Premium активирован для {user_id}")
-        await bot.send_message(user_id, "🎉 Твоя Premium-подписка активирована администратором!")
+        if db.activate_premium(user_id, days=365):
+            await message.answer(f"Premium активирован для {user_id}")
+            try:
+                await bot.send_message(user_id, "🎉 Твоя Premium-подписка активирована администратором!")
+            except Exception:
+                await message.answer("Юзер не найден в чатах (не начинал диалог с ботом).")
+        else:
+            await message.answer(f"Пользователь {user_id} не найден в БД. Сначала нужно пройти /start.")
     except (IndexError, ValueError):
         await message.answer("Использование: /activate user_id")
 
