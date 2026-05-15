@@ -441,6 +441,13 @@ async def show_my_state(callback: types.CallbackQuery):
             f"📔 Записей в дневнике: {diary_n}\n"
             f"📋 Разборов: {analysis_n}\n"
         )
+        test_results = db.get_test_results(callback.from_user.id, limit=5)
+        if test_results:
+            text += "\n**Последние тесты:**\n"
+            names = {"bdi": "BDI", "bai": "BAI", "bhs": "BHS", "gad7": "GAD-7", "ptgi": "PTGI", "dass21": "DASS-21", "luscher": "Люшер"}
+            for t in test_results:
+                label = names.get(t["test_id"], t["test_id"])
+                text += f"  {t['timestamp'][:10]}: {label} — {t['score']} баллов\n"
         if len(diag_log) > 1:
             text += "\n**История диагностик:**\n"
             for d in diag_log:
@@ -506,6 +513,7 @@ async def ask_beck_question(message: types.Message, state: FSMContext, is_new_me
             "⚠️ Это не диагноз. Тест показывает текущее эмоциональное состояние.\n"
             "Если тебя беспокоит результат — обратись к специалисту."
         )
+        db.save_test_result(message.chat.id, "bdi", total, level)
         await message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
         await state.clear()
         return
@@ -661,6 +669,8 @@ async def finish_test(msg, uid):
         dl = das_level(d, _DASS_NORMS["D"])
         al = das_level(a, _DASS_NORMS["A"])
         sl = das_level(s, _DASS_NORMS["S"])
+        details = f"D:{d}({dl}), A:{a}({al}), S:{s}({sl})"
+        db.save_test_result(msg.chat.id, "dass21", d + a + s, details)
         text = (
             f"📊 **DASS-21 завершён!**\n\n"
             f"**Депрессия (D):** {d} баллов — *{dl}*\n"
@@ -676,6 +686,7 @@ async def finish_test(msg, uid):
         )
     else:
         level = test_level(score, sess["levels"])
+        db.save_test_result(msg.chat.id, sess["tid"], score, level)
         text = (
             f"📋 **{TESTS_MENU[sess['tid']]['name']} завершён!**\n\n"
             f"Твой результат: **{score} баллов** — {level}.\n\n"
@@ -746,6 +757,10 @@ async def finish_luscher(msg, uid):
     order2 = sess["picked"]
     pos1 = {c: i for i, c in enumerate(order1)}
     pos2 = {c: i for i, c in enumerate(order2)}
+
+    colors_str = "1:" + "".join(str(c) for c in order1) + " 2:" + "".join(str(c) for c in order2)
+    stable_cnt = sum(1 for c in range(8) if abs(pos1.get(c, 8) - pos2.get(c, 8)) <= 1)
+    db.save_test_result(uid, "luscher", stable_cnt, colors_str)
 
     text = "🎨 **Тест Люшера завершён!**\n\n"
     text += "**1-й раунд:**\n"

@@ -66,6 +66,16 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS test_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            test_id TEXT,
+            score INTEGER,
+            details TEXT,
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -245,3 +255,21 @@ def get_diary_count(user_id: int) -> int:
     row = cursor.fetchone()
     conn.close()
     return row["cnt"] if row else 0
+
+
+def save_test_result(user_id: int, test_id: str, score: int, details: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO test_results (user_id, test_id, score, details, timestamp) VALUES (?, ?, ?, ?, ?)',
+                   (user_id, test_id, score, details, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_test_results(user_id: int, limit: int = 20):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT test_id, score, details, timestamp FROM test_results WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
