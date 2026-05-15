@@ -337,9 +337,10 @@ async def process_behavior(message: types.Message, state: FSMContext):
 
 @dp.message(OARS.waiting_confirmation)
 async def process_confirmation(message: types.Message, state: FSMContext):
-    if message.text.lower().strip().startswith("да"):
+    if message.text.lower().strip() in ("да", "да.", "да!"):
         await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
         story = db.get_user_story(message.from_user.id)
+        story_text = "\n".join(f"{s['q']}: {s['a']}" for s in story)
         analysis = await ai_module.expert_analysis(story)
         await message.answer(analysis, reply_markup=main_menu_kb)
         user_state = db.get_user_state(message.from_user.id)
@@ -347,11 +348,15 @@ async def process_confirmation(message: types.Message, state: FSMContext):
             user_id=message.from_user.id,
             state=user_state["state"] if user_state else "стабилизация",
             score=user_state["score"] if user_state else 0,
-            analysis=analysis
+            analysis=analysis,
+            story=story_text
         )
         db.clear_user_story(message.from_user.id)
         await state.clear()
-    elif message.text.lower().strip().startswith("нет"):
+    elif message.text.lower().strip() in ("нет", "нет.", "нет!", "назад", "меню", "выйти"):
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+    else:
         await state.clear()
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
     else:
@@ -367,13 +372,44 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.answer("Сначала пройди диагностику через /start.")
         await callback.answer()
         return
+    analysis_count = db.get_analysis_count(callback.from_user.id)
     db.clear_user_story(callback.from_user.id)
+    if analysis_count == 0:
+        greeting = (
+            "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
+            "Я буду задавать тебе вопросы, и мы будем углубляться в твою ситуацию: "
+            "разберём триггеры, детские травмы, формат отношений, паттерны зависимости. "
+            "В конце ты получишь полный разбор.\n\n"
+        )
+    else:
+        greeting = (
+            "Рад снова с тобой работать. Мы продолжим углубляться в твою ситуацию. "
+            "Ты проходил(а) этот разбор уже {n} раз — каждый новый помогает замечать то, что раньше "
+            "ускользало от внимания.\n\n"
+        ).format(n=analysis_count + 1)
     await callback.message.answer(
-        "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
-        "Я буду задавать тебе вопросы, и мы будем углубляться в твою ситуацию: "
-        "разберём триггеры, детские травмы, формат отношений, паттерны зависимости. "
-        "В конце ты получишь полный разбор.\n\n"
-        "Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
+        greeting + "Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
+    )
+    await state.set_state(OARS.waiting_situation)
+    await callback.answer()
+        return
+    analysis_count = db.get_analysis_count(callback.from_user.id)
+    db.clear_user_story(callback.from_user.id)
+    if analysis_count == 0:
+        greeting = (
+            "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
+            "Я буду задавать тебе вопросы, и мы будем углубляться в твою ситуацию: "
+            "разберём триггеры, детские травмы, формат отношений, паттерны зависимости. "
+            "В конце ты получишь полный разбор.\n\n"
+        )
+    else:
+        greeting = (
+            "Рад снова с тобой работать. Мы продолжим углубляться в твою ситуацию. "
+            "Ты проходил(а) этот разбор уже {n} раз — каждый новый помогает замечать то, что раньше "
+            "ускользало от внимания.\n\n"
+        ).format(n=analysis_count + 1)
+    await callback.message.answer(
+        greeting + "Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
     )
     await state.set_state(OARS.waiting_situation)
     await callback.answer()
@@ -408,14 +444,25 @@ async def show_my_state(callback: types.CallbackQuery):
         updated = user_data["updated_at"][:10]
         level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
         progress_bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
-        premium = "⭐ Premium" if user_data.get("is_premium") else "—"
+        premium = "⭐ Premium" if db.is_premium(callback.from_user.id) else "—"
+        diary_n = db.get_diary_count(callback.from_user.id)
+        analysis_n = db.get_analysis_count(callback.from_user.id)
+        diag_log = db.get_diagnosis_log(callback.from_user.id, limit=5)
+
         text = (
             f"{emoji.get(user_state, '')} **Твоё состояние:** {level}\n\n"
             f"`{progress_bar}`\nБаллов: {total}/21\n"
             f"Последняя диагностика: {updated}\n"
-            f"Статус: {premium}\n\n"
-            "Можешь пройти диагностику заново в любой момент."
+            f"Статус: {premium}\n"
+            f"📔 Записей в дневнике: {diary_n}\n"
+            f"📋 Разборов: {analysis_n}\n"
         )
+        if len(diag_log) > 1:
+            text += "\n**История диагностик:**\n"
+            for d in diag_log:
+                e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
+                text += f"  {d['timestamp'][:10]}: {e} {d['score']} баллов\n"
+        text += "\nМожешь пройти диагностику заново в любой момент."
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
             [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
@@ -807,24 +854,48 @@ async def diary_write(callback: types.CallbackQuery):
 async def diary_history(callback: types.CallbackQuery):
     entries = db.get_last_entries(callback.from_user.id, limit=5)
     if not entries:
-        text = "У тебя пока нет записей. Напиши что-нибудь в дневник!"
-    else:
-        lines = []
-        for i, e in enumerate(entries, 1):
-            preview = e[:80] + "..." if len(e) > 80 else e
-            lines.append(f"**{i}.** {preview}")
-        text = "📖 **Мои записи:**\n\n" + "\n\n".join(lines)
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+        await callback.message.edit_text("У тебя пока нет записей. Напиши что-нибудь в дневник!", reply_markup=back_to_menu_kb)
+        await callback.answer()
+        return
+    text = "📖 **Мои записи (последние 5):**\n\nНажми на запись, чтобы увидеть ответ AI.\n\n"
+    buttons = []
+    for e in entries:
+        preview = e["entry"][:50] + "..." if len(e["entry"]) > 50 else e["entry"]
+        date = e["timestamp"][:10]
+        buttons.append([InlineKeyboardButton(text=f"📝 {date}: {preview}", callback_data=f"diary_view_{e['id']}")])
+    buttons.append([InlineKeyboardButton(text="🔙 В дневник", callback_data="diary")])
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("diary_view_"))
+async def diary_view_entry(callback: types.CallbackQuery):
+    entry_id = int(callback.data.split("_")[-1])
+    entry = db.get_entry_by_id(entry_id, callback.from_user.id)
+    if not entry:
+        await callback.answer("Запись не найдена.", show_alert=True)
+        return
+    text = (
+        f"📝 **Запись от {entry['timestamp'][:10]}**\n\n"
+        f"**Ты:** {entry['entry']}\n\n"
+        f"**🤖 AI:** {entry['response']}"
+    )
+    if len(text) > 3500:
+        text = text[:3500] + "...\n\n(сообщение сокращено)"
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К списку", callback_data="diary_history")]
+    ])
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
 @dp.message(StateFilter(None))
 async def diary_entry(message: types.Message):
     await bot.send_chat_action(message.chat.id, action="typing")
-    history = db.get_last_entries(message.from_user.id, limit=3)
+    history = [e["entry"] for e in db.get_last_entries(message.from_user.id, limit=3)]
     username = message.from_user.first_name or message.from_user.username or ""
     analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username)
-    db.save_diary_entry(message.from_user.id, message.text)
+    db.save_diary_entry(message.from_user.id, message.text, response=analysis)
     await message.answer(analysis, reply_markup=back_to_menu_kb)
 
 

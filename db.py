@@ -40,6 +40,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             entry TEXT,
+            response TEXT,
             timestamp TEXT
         )
     ''')
@@ -50,6 +51,36 @@ def init_db():
             state TEXT,
             score INTEGER,
             analysis TEXT,
+            story TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diagnosis_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            analysis TEXT,
+            story TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diagnosis_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
             timestamp TEXT
         )
     ''')
@@ -69,6 +100,8 @@ def save_diagnosis(user_id: int, state: str, score: int):
             score = excluded.score,
             updated_at = excluded.updated_at
     ''', (user_id, state, score, now))
+    cursor.execute('INSERT INTO diagnosis_log (user_id, state, score, timestamp) VALUES (?, ?, ?, ?)',
+                   (user_id, state, score, now))
     conn.commit()
     conn.close()
 
@@ -146,11 +179,11 @@ def get_all_users_with_times():
     return rows
 
 
-def save_diary_entry(user_id: int, entry: str):
+def save_diary_entry(user_id: int, entry: str, response: str = ""):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO diary (user_id, entry, timestamp) VALUES (?, ?, ?)',
-                   (user_id, entry, datetime.now().isoformat()))
+    cursor.execute('INSERT INTO diary (user_id, entry, response, timestamp) VALUES (?, ?, ?, ?)',
+                   (user_id, entry, response, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
@@ -158,17 +191,26 @@ def save_diary_entry(user_id: int, entry: str):
 def get_last_entries(user_id: int, limit: int = 3):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT entry FROM diary WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?', (user_id, limit))
+    cursor.execute('SELECT id, entry, response, timestamp FROM diary WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?', (user_id, limit))
     rows = cursor.fetchall()
     conn.close()
-    return [row["entry"] for row in reversed(rows)]
+    return [dict(r) for r in reversed(rows)]
 
 
-def save_analysis(user_id: int, state: str, score: int, analysis: str):
+def get_entry_by_id(entry_id: int, user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('INSERT INTO user_analysis (user_id, state, score, analysis, timestamp) VALUES (?, ?, ?, ?, ?)',
-                   (user_id, state, score, analysis, datetime.now().isoformat()))
+    cursor.execute('SELECT entry, response, timestamp FROM diary WHERE id = ? AND user_id = ?', (entry_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_analysis(user_id: int, state: str, score: int, analysis: str, story: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO user_analysis (user_id, state, score, analysis, story, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                   (user_id, state, score, analysis, story, datetime.now().isoformat()))
     conn.commit()
     conn.close()
 
@@ -176,7 +218,34 @@ def save_analysis(user_id: int, state: str, score: int, analysis: str):
 def get_last_analysis(user_id: int):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT state, score, analysis, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    cursor.execute('SELECT state, score, analysis, story, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def get_analysis_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as cnt FROM user_analysis WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0
+
+
+def get_diagnosis_log(user_id: int, limit: int = 10):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, timestamp FROM diagnosis_log WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_diary_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as cnt FROM diary WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0
