@@ -359,9 +359,6 @@ async def process_confirmation(message: types.Message, state: FSMContext):
     else:
         await state.clear()
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
-    else:
-        await state.clear()
-        await message.answer("Главное меню:", reply_markup=main_menu_kb)
 
 
 # ===== DEEP ANALYSIS FROM MENU =====
@@ -371,27 +368,6 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
     if not user_data:
         await callback.message.answer("Сначала пройди диагностику через /start.")
         await callback.answer()
-        return
-    analysis_count = db.get_analysis_count(callback.from_user.id)
-    db.clear_user_story(callback.from_user.id)
-    if analysis_count == 0:
-        greeting = (
-            "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
-            "Я буду задавать тебе вопросы, и мы будем углубляться в твою ситуацию: "
-            "разберём триггеры, детские травмы, формат отношений, паттерны зависимости. "
-            "В конце ты получишь полный разбор.\n\n"
-        )
-    else:
-        greeting = (
-            "Рад снова с тобой работать. Мы продолжим углубляться в твою ситуацию. "
-            "Ты проходил(а) этот разбор уже {n} раз — каждый новый помогает замечать то, что раньше "
-            "ускользало от внимания.\n\n"
-        ).format(n=analysis_count + 1)
-    await callback.message.answer(
-        greeting + "Расскажи, что произошло. Как давно вы расстались? Кто был инициатором?"
-    )
-    await state.set_state(OARS.waiting_situation)
-    await callback.answer()
         return
     analysis_count = db.get_analysis_count(callback.from_user.id)
     db.clear_user_story(callback.from_user.id)

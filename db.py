@@ -8,6 +8,8 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "bot_data.db")
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -41,46 +43,6 @@ def init_db():
             user_id INTEGER,
             entry TEXT,
             response TEXT,
-            timestamp TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_analysis (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            state TEXT,
-            score INTEGER,
-            analysis TEXT,
-            story TEXT,
-            timestamp TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS diagnosis_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            state TEXT,
-            score INTEGER,
-            timestamp TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS user_analysis (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            state TEXT,
-            score INTEGER,
-            analysis TEXT,
-            story TEXT,
-            timestamp TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS diagnosis_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            state TEXT,
-            score INTEGER,
             timestamp TEXT
         )
     ''')
