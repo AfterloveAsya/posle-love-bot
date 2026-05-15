@@ -454,33 +454,82 @@ async def show_my_state(callback: types.CallbackQuery):
                 e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
                 text += f"  {d['timestamp'][:10]}: {e} {d['score']} баллов\n"
         text += "\nМожешь пройти диагностику заново в любой момент."
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
-            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
-        ])
+        buttons = [[InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")]]
+        if test_results:
+            for t in reversed(test_results[-3:]):
+                label = names.get(t["test_id"], t["test_id"])
+                buttons.append([InlineKeyboardButton(text=f"📊 {t['timestamp'][:10]} {label} ({t['score']})", callback_data=f"tview_{t['id']}")])
+        buttons.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")])
+        kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
 @dp.callback_query(F.data == "my_analysis")
 async def show_my_analysis(callback: types.CallbackQuery):
-    analysis = db.get_last_analysis(callback.from_user.id)
-    if not analysis:
+    analyses = db.get_all_analyses(callback.from_user.id, limit=20)
+    if not analyses:
         await callback.message.edit_text(
             "У тебя пока нет сохранённых разборов. Пройди диагностику и ответь на вопросы, чтобы получить экспертный анализ.",
             reply_markup=back_to_menu_kb
         )
         await callback.answer()
         return
-    date = analysis["timestamp"][:10]
-    state_name = analysis["state"].capitalize()
+    text = "📋 **Мои разборы**\n\nНажми на разбор, чтобы открыть:\n"
+    buttons = []
+    for a in analyses:
+        date = a["timestamp"][:10]
+        em = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(a["state"], "")
+        buttons.append([InlineKeyboardButton(text=f"{em} {date} — {a['score']} баллов", callback_data=f"aview_{a['id']}")])
+    buttons.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")])
+    await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("aview_"))
+async def analysis_view(callback: types.CallbackQuery):
+    aid = int(callback.data.split("_")[-1])
+    a = db.get_analysis_by_id(aid, callback.from_user.id)
+    if not a:
+        await callback.answer("Разбор не найден.", show_alert=True)
+        return
+    state_name = a["state"].capitalize()
     text = (
-        f"📋 **Твой последний разбор**\n"
-        f"Состояние: **{state_name}**\n"
-        f"Дата: {date}\n\n"
-        f"{analysis['analysis']}"
+        f"📋 **Разбор от {a['timestamp'][:10]}**\n"
+        f"Состояние: **{state_name}** ({a['score']} баллов)\n\n"
+        f"{a['analysis']}"
     )
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К списку разборов", callback_data="my_analysis")]
+    ])
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data.startswith("tview_"))
+async def test_view(callback: types.CallbackQuery):
+    tid = int(callback.data.split("_")[-1])
+    t = db.get_test_result_by_id(tid, callback.from_user.id)
+    if not t:
+        await callback.answer("Результат не найден.", show_alert=True)
+        return
+    names = {"bdi": "BDI (депрессия)", "bai": "BAI (тревога)", "bhs": "BHS (безнадёжность)", "gad7": "GAD-7 (тревога)", "ptgi": "PTGI (посттравматический рост)", "dass21": "DASS-21 (депрессия/тревога/стресс)", "luscher": "Тест Люшера"}
+    label = names.get(t["test_id"], t["test_id"])
+    text = (
+        f"📊 **{label}**\n"
+        f"Дата: {t['timestamp'][:10]}\n"
+        f"Результат: **{t['score']} баллов**\n"
+    )
+    if t["details"]:
+        text += f"Интерпретация: {t['details']}\n"
+    if t["test_id"] == "dass21" and t["details"]:
+        for part in t["details"].split(", "):
+            text += f"  • {part}\n"
+    text += "\n⚠️ Это не диагноз. Тест показывает текущее состояние."
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 К состоянию", callback_data="my_state")]
+    ])
+    await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
     await callback.answer()
 
 
@@ -893,7 +942,9 @@ async def diary_entry(message: types.Message):
     await bot.send_chat_action(message.chat.id, action="typing")
     history = [e["entry"] for e in db.get_last_entries(message.from_user.id, limit=3)]
     username = message.from_user.first_name or message.from_user.username or ""
-    analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username)
+    last_date = db.get_last_diary_date(message.from_user.id)
+    is_first_today = last_date != message.date.strftime("%Y-%m-%d")
+    analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username, is_first_today=is_first_today)
     db.save_diary_entry(message.from_user.id, message.text, response=analysis)
     await message.answer(analysis, reply_markup=back_to_menu_kb)
 

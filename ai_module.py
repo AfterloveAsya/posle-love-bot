@@ -40,7 +40,7 @@ DIARY_SYSTEM_PROMPT = (
 )
 
 
-async def analyze_diary_entry(text: str, history: list = None, username: str = "") -> str:
+async def analyze_diary_entry(text: str, history: list = None, username: str = "", is_first_today: bool = True) -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
@@ -54,6 +54,8 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
     user_content = "\n\n".join(parts)
     if username:
         user_content += f"\n\nКлиента зовут {username}."
+    if not is_first_today:
+        user_content += "\n\nВажно: это не первое сообщение за сегодня. Не здоровайся и не представляйся — просто продолжи анализ."
     payload = {
         "model": MODEL_DIARY,
         "messages": [

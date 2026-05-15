@@ -269,7 +269,43 @@ def save_test_result(user_id: int, test_id: str, score: int, details: str = ""):
 def get_test_results(user_id: int, limit: int = 20):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT test_id, score, details, timestamp FROM test_results WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    cursor.execute('SELECT id, test_id, score, details, timestamp FROM test_results WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in reversed(rows)]
+
+
+def get_test_result_by_id(result_id: int, user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT test_id, score, details, timestamp FROM test_results WHERE id = ? AND user_id = ?', (result_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_analyses(user_id: int, limit: int = 20):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, state, score, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_analysis_by_id(analysis_id: int, user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, analysis, story, timestamp FROM user_analysis WHERE id = ? AND user_id = ?', (analysis_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_last_diary_date(user_id: int) -> str:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT timestamp FROM diary WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["timestamp"][:10] if row else None
