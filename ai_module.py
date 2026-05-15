@@ -40,11 +40,14 @@ DIARY_SYSTEM_PROMPT = (
 )
 
 
-async def analyze_diary_entry(text: str, history: list = None, username: str = "", is_first_today: bool = True) -> str:
+async def analyze_diary_entry(text: str, history: list = None, username: str = "", is_first_today: bool = True, user_context: str = "") -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json"
     }
+    system = DIARY_SYSTEM_PROMPT
+    if user_context:
+        system += f"\n\nКонтекст пользователя:\n{user_context}"
     parts = []
     if history:
         history_lines = "\n".join(f"- {h}" for h in history if isinstance(h, str))
@@ -59,7 +62,7 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
     payload = {
         "model": MODEL_DIARY,
         "messages": [
-            {"role": "system", "content": DIARY_SYSTEM_PROMPT},
+            {"role": "system", "content": system},
             {"role": "user", "content": user_content}
         ],
         "temperature": 0.7,

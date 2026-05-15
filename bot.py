@@ -454,7 +454,8 @@ async def show_my_state(callback: types.CallbackQuery):
                 e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
                 text += f"  {d['timestamp'][:10]}: {e} {d['score']} баллов\n"
         text += "\nМожешь пройти диагностику заново в любой момент."
-        buttons = [[InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")]]
+        buttons = [[InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
+                   [InlineKeyboardButton(text="📋 Полная карта", callback_data="diag_card")]]
         if test_results:
             for t in reversed(test_results[-3:]):
                 label = names.get(t["test_id"], t["test_id"])
@@ -462,6 +463,58 @@ async def show_my_state(callback: types.CallbackQuery):
         buttons.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")])
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         await callback.message.edit_text(text, reply_markup=kb, parse_mode="Markdown")
+    await callback.answer()
+
+
+@dp.callback_query(F.data == "diag_card")
+async def diagnostic_card(callback: types.CallbackQuery):
+    uid = callback.from_user.id
+    user_data = db.get_user_state(uid)
+    if not user_data or not user_data.get("state"):
+        await callback.message.edit_text("Сначала пройди диагностику через /start.", reply_markup=back_to_menu_kb)
+        await callback.answer()
+        return
+    total = user_data["score"] or 0
+    emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
+    level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
+    bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
+    premium = "⭐ Premium" if db.is_premium(uid) else "—"
+
+    lines = [f"📋 **Диагностическая карта**\n"]
+    lines.append(f"{emoji.get(user_data.get('state',''),'')} **{level}**")
+    lines.append(f"`{bar}`  {total}/21 баллов")
+    lines.append(f"Статус: {premium}\n")
+
+    diag_log = db.get_diagnosis_log(uid, limit=10)
+    if diag_log:
+        lines.append("**📈 История диагностик:**")
+        for d in diag_log:
+            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
+            lines.append(f"{d['timestamp'][:10]}: {e} {d['state']} ({d['score']})")
+
+    tests = db.get_test_results(uid, limit=10)
+    if tests:
+        lines.append("\n**📊 Результаты тестов:**")
+        names = {"bdi": "BDI", "bai": "BAI", "bhs": "BHS", "gad7": "GAD-7", "ptgi": "PTGI", "dass21": "DASS-21", "luscher": "Люшер"}
+        for t in tests:
+            label = names.get(t["test_id"], t["test_id"])
+            lines.append(f"{t['timestamp'][:10]}: {label} — {t['score']} баллов")
+
+    analyses = db.get_all_analyses(uid, limit=5)
+    if analyses:
+        lines.append("\n**📋 Разборы:**")
+        for a in analyses:
+            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(a['state'], '')
+            lines.append(f"{a['timestamp'][:10]}: {e} {a['state']} ({a['score']})")
+
+    lines.append(f"\n📔 Записей в дневнике: {db.get_diary_count(uid)}")
+
+    await callback.message.edit_text(
+        "\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ]), parse_mode="Markdown"
+    )
     await callback.answer()
 
 
@@ -807,10 +860,6 @@ async def finish_luscher(msg, uid):
     pos1 = {c: i for i, c in enumerate(order1)}
     pos2 = {c: i for i, c in enumerate(order2)}
 
-    colors_str = "1:" + "".join(str(c) for c in order1) + " 2:" + "".join(str(c) for c in order2)
-    stable_cnt = sum(1 for c in range(8) if abs(pos1.get(c, 8) - pos2.get(c, 8)) <= 1)
-    db.save_test_result(uid, "luscher", stable_cnt, colors_str)
-
     text = "🎨 **Тест Люшера завершён!**\n\n"
     text += "**1-й раунд:**\n"
     for i, c in enumerate(order1):
@@ -862,6 +911,33 @@ async def finish_luscher(msg, uid):
             text += "⬜ Серый нестабилен — желание отгородиться vs потребность в контакте.\n"
 
     text += "\n*⚠️ Упрощённая трактовка. Полный тест Люшера проводится специалистом.*"
+
+    stable_cnt = len(stable)
+    summary_parts = []
+    if prim_first >= 3:
+        summary_parts.append("эмоциональное равновесие")
+    elif prim_first >= 1:
+        summary_parts.append("частичный ресурс, нестабильность")
+    else:
+        summary_parts.append("возможный стресс")
+
+    if stable_cnt >= 5:
+        summary_parts.append("устойчивые ценности")
+    elif stable_cnt < 3:
+        summary_parts.append("внутренняя растерянность")
+
+    if len(unstable) >= 3:
+        summary_parts.append("внутренний конфликт")
+    if order1[0] == 2:
+        summary_parts.append("потребность в стабильности")
+    elif order1[0] == 0:
+        summary_parts.append("потребность в действии")
+    elif order1[0] == 3:
+        summary_parts.append("потребность в покое")
+    elif order1[0] == 1:
+        summary_parts.append("потребность в радости")
+
+    db.save_test_result(uid, "luscher", stable_cnt, ", ".join(summary_parts))
     await msg.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
 
 
@@ -944,7 +1020,7 @@ async def diary_entry(message: types.Message):
     username = message.from_user.first_name or message.from_user.username or ""
     last_date = db.get_last_diary_date(message.from_user.id)
     is_first_today = last_date != message.date.strftime("%Y-%m-%d")
-    analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username, is_first_today=is_first_today)
+    analysis = await ai_module.analyze_diary_entry(message.text, history=history, username=username, is_first_today=is_first_today, user_context=db.get_user_context(message.from_user.id))
     db.save_diary_entry(message.from_user.id, message.text, response=analysis)
     await message.answer(analysis, reply_markup=back_to_menu_kb)
 

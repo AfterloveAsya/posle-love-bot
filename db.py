@@ -309,3 +309,22 @@ def get_last_diary_date(user_id: int) -> str:
     row = cursor.fetchone()
     conn.close()
     return row["timestamp"][:10] if row else None
+
+
+def get_user_context(user_id: int) -> str:
+    lines = []
+    u = get_user_state(user_id)
+    if u and u.get("state"):
+        lines.append(f"Текущее состояние: {u['state']} ({u['score']} баллов)")
+    tests = get_test_results(user_id, limit=3)
+    if tests:
+        names = {"bdi": "BDI", "bai": "BAI", "bhs": "BHS", "gad7": "GAD-7", "ptgi": "PTGI", "dass21": "DASS-21", "luscher": "Люшер"}
+        test_line = "; ".join(f"{names.get(t['test_id'], t['test_id'])}: {t['score']} баллов" for t in tests)
+        lines.append(f"Последние тесты: {test_line}")
+    n = get_analysis_count(user_id)
+    if n:
+        lines.append(f"Проведено разборов: {n}")
+    d = get_diary_count(user_id)
+    if d:
+        lines.append(f"Записей в дневнике: {d}")
+    return "\n".join(lines) if lines else ""
