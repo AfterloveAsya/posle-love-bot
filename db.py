@@ -46,6 +46,26 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            analysis TEXT,
+            story TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diagnosis_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
