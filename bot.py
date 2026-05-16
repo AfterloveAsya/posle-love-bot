@@ -341,7 +341,7 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
         story = db.get_user_story(message.from_user.id)
         story_text = "\n".join(f"{s['q']}: {s['a']}" for s in story)
-        analysis = await ai_module.expert_analysis(story)
+        analysis = await ai_module.expert_analysis(story, user_context=db.get_user_context(message.from_user.id))
         await message.answer(analysis, reply_markup=main_menu_kb)
         user_state = db.get_user_state(message.from_user.id)
         db.save_analysis(
@@ -431,6 +431,7 @@ async def show_my_state(callback: types.CallbackQuery):
         premium = "⭐ Premium" if db.is_premium(callback.from_user.id) else "—"
         diary_n = db.get_diary_count(callback.from_user.id)
         analysis_n = db.get_analysis_count(callback.from_user.id)
+        streak = db.get_streak_count(callback.from_user.id)
         diag_log = db.get_diagnosis_log(callback.from_user.id, limit=5)
 
         text = (
@@ -438,8 +439,11 @@ async def show_my_state(callback: types.CallbackQuery):
             f"`{progress_bar}`\nБаллов: {total}/21\n"
             f"Последняя диагностика: {updated}\n"
             f"Статус: {premium}\n"
-            f"📔 Записей в дневнике: {diary_n}\n"
-            f"📋 Разборов: {analysis_n}\n"
+            f"📔 Записей в дневнике: {diary_n}"
+        )
+        if streak > 1:
+            text += f"\n🔥 Дней подряд: {streak}"
+        text += f"\n📋 Разборов: {analysis_n}\n"
         )
         test_results = db.get_test_results(callback.from_user.id, limit=5)
         if test_results:
@@ -948,8 +952,23 @@ async def show_task(callback: types.CallbackQuery):
         text = "Сначала пройди диагностику. Нажми /start."
     else:
         state = user_data["state"]
-        tasks = TASKS.get(state, TASKS["стабилизация"])
-        chosen = random.choice(tasks)
+        pool = list(TASKS.get(state, TASKS["стабилизация"]))
+        tests = db.get_test_results(callback.from_user.id, limit=5)
+        if tests:
+            for t in tests:
+                if t["test_id"] == "bai" and t["score"] >= 10:
+                    pool.append("🌊 **Заземление:** Умойся холодной водой и сделай квадратное дыхание (4-4-4-4).")
+                    pool.append("🧊 **Лёд:** Подержи кубик льда в руке 30 секунд, концентрируясь на ощущении.")
+                if t["test_id"] == "bdi" and t["score"] >= 14:
+                    pool.append("🌱 **Маленький шаг:** Сделай сегодня одно простое действие — заправь постель или выйди на 5 мин.")
+                    pool.append("☀️ **Свет:** Посиди на солнце или у окна 10 минут, закрыв глаза.")
+                if t["test_id"] == "gad7" and t["score"] >= 10:
+                    pool.append("📝 **Выгрузи тревогу:** Напиши список «что меня тревожит» и раздели на контролируемое/неконтролируемое.")
+                if t["test_id"] == "ptgi" and t["score"] < 21:
+                    pool.append("💎 **Одна хорошая вещь:** Вспомни и запиши 1 качество, которое ты открыл(а) в себе после расставания.")
+                if t["test_id"] == "bhs" and t["score"] >= 9:
+                    pool.append("🌟 **Якорь будущего:** Представь себя через год — где ты, кто рядом, что чувствуешь. Запиши 3 детали.")
+        chosen = random.choice(pool)
         text = f"📋 **Твоё задание на сегодня:**\n\n{chosen}\n\nВозвращайся завтра за новым!"
     await callback.message.edit_text(text, reply_markup=back_to_menu_kb, parse_mode="Markdown")
     await callback.answer()

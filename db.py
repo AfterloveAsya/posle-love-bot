@@ -327,4 +327,28 @@ def get_user_context(user_id: int) -> str:
     d = get_diary_count(user_id)
     if d:
         lines.append(f"Записей в дневнике: {d}")
+    streak = get_streak_count(user_id)
+    if streak > 1:
+        lines.append(f"Дней подряд в дневнике: {streak}")
     return "\n".join(lines) if lines else ""
+
+
+def get_streak_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT DISTINCT substr(timestamp, 1, 10) as day FROM diary WHERE user_id = ? ORDER BY day DESC LIMIT 365', (user_id,))
+    days = [row["day"] for row in cursor.fetchall()]
+    conn.close()
+    if not days:
+        return 0
+    from datetime import date, timedelta
+    streak = 0
+    today = date.today().isoformat()
+    expected = today
+    for d in days:
+        if d == expected:
+            streak += 1
+            expected = (date.fromisoformat(d) - timedelta(days=1)).isoformat()
+        else:
+            break
+    return streak
