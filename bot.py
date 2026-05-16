@@ -705,6 +705,9 @@ async def show_test_question(msg, uid):
     if sess["tid"] == "bhs":
         text_q, is_rev = qs[qidx]
         opts = _BHS_OPTS
+    elif sess["tid"] == "dass21":
+        text_q, _ = qs[qidx]
+        opts = _DASS21_OPTS
     else:
         text_q, opts = qs[qidx]
 
