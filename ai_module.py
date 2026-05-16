@@ -70,10 +70,10 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=25) as resp:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    logging.error(f"OpenRouter error {resp.status}: {error_text}")
+                    logging.error(f"OpenRouter diary error {resp.status}: {error_text}")
                     return "Пока не могу проанализировать запись, но я её сохранил."
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"].strip()
@@ -109,10 +109,10 @@ async def expert_analysis(user_story: list) -> str:
     }
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=30) as resp:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    logging.error(f"OpenRouter error {resp.status}: {error_text}")
+                    logging.error(f"OpenRouter expert error {resp.status}: {error_text}")
                     return "Не удалось провести экспертный анализ, но я сохраню твою историю."
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"].strip()
