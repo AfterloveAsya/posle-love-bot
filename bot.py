@@ -444,7 +444,6 @@ async def show_my_state(callback: types.CallbackQuery):
         if streak > 1:
             text += f"\n🔥 Дней подряд: {streak}"
         text += f"\n📋 Разборов: {analysis_n}\n"
-        )
         test_results = db.get_test_results(callback.from_user.id, limit=5)
         if test_results:
             text += "\n**Последние тесты:**\n"
