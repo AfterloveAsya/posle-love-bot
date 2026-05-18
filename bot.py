@@ -1036,7 +1036,7 @@ async def diary_view_entry(callback: types.CallbackQuery):
     await callback.answer()
 
 
-@dp.message(StateFilter(None))
+@dp.message(StateFilter(None), F.text)
 async def diary_entry(message: types.Message):
     await bot.send_chat_action(message.chat.id, action="typing")
     history = [e["entry"] for e in db.get_last_entries(message.from_user.id, limit=3)]
@@ -1174,7 +1174,7 @@ LIBRARY = {
 
 SCHEMA_CATEGORIES = {
     "det": {
-        "emoji": "🔹",
+        "emoji": "",
         "title": "Детские и уязвимые режимы (раненые части)",
         "modes": {
             "Уязвимый ребёнок": "напуганный, покинутый, жаждущий любви и принятия. Чувствует себя никому не нужным, плачет, обижается, боится отвержения и одиночества.",
@@ -1182,7 +1182,7 @@ SCHEMA_CATEGORIES = {
         }
     },
     "cop": {
-        "emoji": "🔹",
+        "emoji": "",
         "title": "Дезадаптивные копинг-режимы (защитные механизмы, которые вредят)",
         "modes": {
             "Разгневанный защитник": "агрессивная, контролирующая часть. Нападает на других (кричит, обвиняет, ставит ультиматумы) или защищается через злость, когда границы нарушены.",
@@ -1195,7 +1195,7 @@ SCHEMA_CATEGORIES = {
         }
     },
     "health": {
-        "emoji": "🔹",
+        "emoji": "",
         "title": "Здоровые режимы",
         "modes": {
             "Здоровый взрослый": "сильная, осознанная часть, которая заботится о себе и внутреннем ребёнке, планирует, работает, ставит границы, анализирует свои режимы и управляет ими. Умеет и любить, и требовать, и отдыхать, не впадая в крайности.",
@@ -1469,9 +1469,9 @@ async def library_menu(callback: types.CallbackQuery):
 def build_schema_menu_kb():
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🔹 Детские и уязвимые режимы", callback_data="lib_schema_det")],
-            [InlineKeyboardButton(text="🔹 Дезадаптивные копинг-режимы", callback_data="lib_schema_cop")],
-            [InlineKeyboardButton(text="🔹 Здоровые режимы", callback_data="lib_schema_health")],
+            [InlineKeyboardButton(text="Детские и уязвимые режимы", callback_data="lib_schema_det")],
+            [InlineKeyboardButton(text="Дезадаптивные копинг-режимы", callback_data="lib_schema_cop")],
+            [InlineKeyboardButton(text="Здоровые режимы", callback_data="lib_schema_health")],
             [InlineKeyboardButton(text="🔙 В библиотеку", callback_data="library")],
         ]
     )
@@ -1492,7 +1492,7 @@ async def schema_menu(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lib_schema_det")
 async def schema_det(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["det"]
-    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    text = f"**{cat['title']}**\n\n"
     modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1509,7 +1509,7 @@ async def schema_det(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lib_schema_cop")
 async def schema_cop(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["cop"]
-    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    text = f"**{cat['title']}**\n\n"
     modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -1526,7 +1526,7 @@ async def schema_cop(callback: types.CallbackQuery):
 @dp.callback_query(F.data == "lib_schema_health")
 async def schema_health(callback: types.CallbackQuery):
     cat = SCHEMA_CATEGORIES["health"]
-    text = f"{cat['emoji']} **{cat['title']}**\n\n"
+    text = f"**{cat['title']}**\n\n"
     modes = list(cat["modes"].items())
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
