@@ -1,0 +1,356 @@
+import sqlite3
+import os
+from datetime import datetime, timedelta
+
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "bot_data.db")
+
+
+def get_connection():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    return conn
+
+
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            state TEXT,
+            score INTEGER,
+            updated_at TEXT,
+            is_premium INTEGER DEFAULT 0,
+            premium_until TEXT,
+            morning_hour INTEGER DEFAULT 6,
+            evening_hour INTEGER DEFAULT 18
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_story (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            question TEXT,
+            answer TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diary (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            entry TEXT,
+            response TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_analysis (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            analysis TEXT,
+            story TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diagnosis_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS test_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            test_id TEXT,
+            score INTEGER,
+            details TEXT,
+            timestamp TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+def save_diagnosis(user_id: int, state: str, score: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute('''
+        INSERT INTO users (user_id, state, score, updated_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            state = excluded.state,
+            score = excluded.score,
+            updated_at = excluded.updated_at
+    ''', (user_id, state, score, now))
+    cursor.execute('INSERT INTO diagnosis_log (user_id, state, score, timestamp) VALUES (?, ?, ?, ?)',
+                   (user_id, state, score, now))
+    conn.commit()
+    conn.close()
+
+
+def get_user_state(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, updated_at, is_premium, morning_hour, evening_hour FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_user_answer(user_id: int, question: str, answer: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO user_story (user_id, question, answer, timestamp) VALUES (?, ?, ?, ?)',
+                   (user_id, question, answer, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_user_story(user_id: int) -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT question, answer FROM user_story WHERE user_id = ? ORDER BY id', (user_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [{"q": row["question"], "a": row["answer"]} for row in rows]
+
+
+def clear_user_story(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('DELETE FROM user_story WHERE user_id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def activate_premium(user_id: int, days: int = 365):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT 1 FROM users WHERE user_id = ?', (user_id,))
+    if not cursor.fetchone():
+        conn.close()
+        return False
+    until = (datetime.now() + timedelta(days=days)).isoformat()
+    cursor.execute('UPDATE users SET is_premium = 1, premium_until = ? WHERE user_id = ?', (until, user_id))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def is_premium(user_id: int) -> bool:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT is_premium, premium_until FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["is_premium"]:
+        try:
+            if datetime.fromisoformat(row["premium_until"]) > datetime.now():
+                return True
+        except (ValueError, TypeError):
+            return False
+    return False
+
+
+def set_user_time(user_id: int, morning: int, evening: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO users (user_id, morning_hour, evening_hour)
+        VALUES (?, ?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET
+            morning_hour = excluded.morning_hour,
+            evening_hour = excluded.evening_hour
+    ''', (user_id, morning, evening))
+    conn.commit()
+    conn.close()
+
+
+def get_all_users_with_times():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT user_id, state, morning_hour, evening_hour FROM users')
+    rows = cursor.fetchall()
+    conn.close()
+    return rows
+
+
+def save_diary_entry(user_id: int, entry: str, response: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO diary (user_id, entry, response, timestamp) VALUES (?, ?, ?, ?)',
+                   (user_id, entry, response, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_last_entries(user_id: int, limit: int = 3):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, entry, response, timestamp FROM diary WHERE user_id = ? ORDER BY timestamp DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_entry_by_id(entry_id: int, user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT entry, response, timestamp FROM diary WHERE id = ? AND user_id = ?', (entry_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_analysis(user_id: int, state: str, score: int, analysis: str, story: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO user_analysis (user_id, state, score, analysis, story, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                   (user_id, state, score, analysis, story, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_last_analysis(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, analysis, story, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_analysis_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as cnt FROM user_analysis WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0
+
+
+def get_diagnosis_log(user_id: int, limit: int = 10):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, timestamp FROM diagnosis_log WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_diary_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT COUNT(*) as cnt FROM diary WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0
+
+
+def save_test_result(user_id: int, test_id: str, score: int, details: str = ""):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO test_results (user_id, test_id, score, details, timestamp) VALUES (?, ?, ?, ?, ?)',
+                   (user_id, test_id, score, details, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_test_results(user_id: int, limit: int = 20):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, test_id, score, details, timestamp FROM test_results WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_test_result_by_id(result_id: int, user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT test_id, score, details, timestamp FROM test_results WHERE id = ? AND user_id = ?', (result_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_analyses(user_id: int, limit: int = 20):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, state, score, timestamp FROM user_analysis WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
+
+
+def get_analysis_by_id(analysis_id: int, user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT state, score, analysis, story, timestamp FROM user_analysis WHERE id = ? AND user_id = ?', (analysis_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_last_diary_date(user_id: int) -> str:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT timestamp FROM diary WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["timestamp"][:10] if row else None
+
+
+def get_user_context(user_id: int) -> str:
+    lines = []
+    u = get_user_state(user_id)
+    if u and u.get("state"):
+        lines.append(f"Текущее состояние: {u['state']} ({u['score']} баллов)")
+    tests = get_test_results(user_id, limit=3)
+    if tests:
+        names = {"bdi": "BDI", "bai": "BAI", "bhs": "BHS", "gad7": "GAD-7", "ptgi": "PTGI", "dass21": "DASS-21", "luscher": "Люшер"}
+        test_line = "; ".join(f"{names.get(t['test_id'], t['test_id'])}: {t['score']} баллов" for t in tests)
+        lines.append(f"Последние тесты: {test_line}")
+    n = get_analysis_count(user_id)
+    if n:
+        lines.append(f"Проведено разборов: {n}")
+    d = get_diary_count(user_id)
+    if d:
+        lines.append(f"Записей в дневнике: {d}")
+    streak = get_streak_count(user_id)
+    if streak > 1:
+        lines.append(f"Дней подряд в дневнике: {streak}")
+    return "\n".join(lines) if lines else ""
+
+
+def get_streak_count(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT DISTINCT substr(timestamp, 1, 10) as day FROM diary WHERE user_id = ? ORDER BY day DESC LIMIT 365', (user_id,))
+    days = [row["day"] for row in cursor.fetchall()]
+    conn.close()
+    if not days:
+        return 0
+    from datetime import date, timedelta
+    streak = 0
+    today = date.today().isoformat()
+    expected = today
+    for d in days:
+        if d == expected:
+            streak += 1
+            expected = (date.fromisoformat(d) - timedelta(days=1)).isoformat()
+        else:
+            break
+    return streak
