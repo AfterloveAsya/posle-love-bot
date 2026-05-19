@@ -53,8 +53,8 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
     payload = {
         "model": MODEL_DIARY,
         "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user_content}
+            {"role": "system", "content": [{"type": "text", "text": system}]},
+            {"role": "user", "content": [{"type": "text", "text": user_content}]}
         ],
         "temperature": 0.7,
         "max_tokens": 600
@@ -107,8 +107,8 @@ async def expert_analysis(user_story: list, user_context: str = "") -> str:
     payload = {
         "model": MODEL_EXPERT,
         "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": f"История клиента:\n{context}"}
+            {"role": "system", "content": [{"type": "text", "text": system}]},
+            {"role": "user", "content": [{"type": "text", "text": f"История клиента:\n{context}"}]}
         ],
         "temperature": 0.7,
         "max_tokens": 1000
