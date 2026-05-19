@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import os
 import random
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, StateFilter
@@ -16,8 +17,8 @@ import db
 import ai_module
 import scheduler
 
-BOT_TOKEN = "8746574885:AAEjgDVRSdmv9M_gdgDiH32Ax9RALfiGI0A"
-ADMIN_USER_ID = 6433905414
+BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
+ADMIN_USER_ID = int(os.environ.get("ADMIN_USER_ID", "0"))
 
 logging.basicConfig(level=logging.INFO)
 
@@ -340,6 +341,15 @@ async def process_behavior(message: types.Message, state: FSMContext):
 @dp.message(OARS.waiting_confirmation)
 async def process_confirmation(message: types.Message, state: FSMContext):
     if message.text.lower().strip() in ("да", "да.", "да!"):
+        if not db.is_premium(message.from_user.id):
+            db.clear_user_story(message.from_user.id)
+            await state.clear()
+            await message.answer(
+                "📋 **Экспертный разбор** доступен по подписке Premium.\n\n"
+                "Оформить: Настройки → Подписка",
+                reply_markup=main_menu_kb, parse_mode="Markdown"
+            )
+            return
         await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
         story = db.get_user_story(message.from_user.id)
         story_text = "\n".join(f"{s['q']}: {s['a']}" for s in story)
@@ -373,6 +383,14 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
         return
     analysis_count = db.get_analysis_count(callback.from_user.id)
     db.clear_user_story(callback.from_user.id)
+    if not db.is_premium(callback.from_user.id):
+        await callback.message.answer(
+            "🔍 **Углублённый разбор** — премиум-функция.\n\n"
+            "Оформить подписку: Настройки → Подписка",
+            reply_markup=main_menu_kb
+        )
+        await callback.answer()
+        return
     if analysis_count == 0:
         greeting = (
             "Спасибо, что обратился. Сейчас мы начнём с тобой полноценную сессию. "
@@ -1036,8 +1054,23 @@ async def diary_view_entry(callback: types.CallbackQuery):
     await callback.answer()
 
 
+GREETINGS = {"привет", "здравствуй", "здравствуйте", "хай", "hi", "hello", "ку", "даров", "салют", "добрый день", "доброе утро", "добрый вечер", "хелоу", "хелло"}
+
 @dp.message(StateFilter(None), F.text)
 async def diary_entry(message: types.Message):
+    text = message.text.strip().lower()
+    if text in GREETINGS or len(text) < 3:
+        await message.answer("🌿 Привет! Как твоё настроение сегодня? Можешь рассказать, что на душе, или выбрать пункт в меню.", reply_markup=main_menu_kb)
+        return
+    if not db.is_premium(message.from_user.id):
+        db.save_diary_entry(message.from_user.id, message.text, response="")
+        await message.answer(
+            "📓 **Запись сохранена!**\n\n"
+            "AI-анализ дневника доступен по подписке Premium.\n"
+            "Оформить: меню → Настройки → Подписка",
+            reply_markup=back_to_menu_kb, parse_mode="Markdown"
+        )
+        return
     await bot.send_chat_action(message.chat.id, action="typing")
     history = [e["entry"] for e in db.get_last_entries(message.from_user.id, limit=3)]
     username = message.from_user.first_name or message.from_user.username or ""
