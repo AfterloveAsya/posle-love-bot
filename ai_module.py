@@ -1,3 +1,4 @@
+import asyncio
 import aiohttp
 import logging
 import os
@@ -5,7 +6,7 @@ import os
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-MODEL_DIARY = "openai/gpt-4o-mini"
+MODEL_DIARY = "openai/gpt-4o"
 MODEL_EXPERT = "deepseek/deepseek-chat"
 
 DIARY_SYSTEM_PROMPT = (
@@ -71,10 +72,13 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
             async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60) as resp:
                 if resp.status != 200:
                     error_text = await resp.text()
-                    logging.error(f"OpenRouter diary error {resp.status}: {error_text}")
+                    logging.error(f"OpenRouter diary error {resp.status} model={MODEL_DIARY}: {error_text[:500]}")
                     return "Пока не могу проанализировать запись, но я её сохранил."
                 data = await resp.json()
                 return data["choices"][0]["message"]["content"].strip()
+    except asyncio.TimeoutError:
+        logging.error("OpenRouter diary timeout")
+        return "Пока не могу проанализировать запись, но я её сохранил."
     except Exception as e:
         logging.error(f"AI analyze failed: {e}")
         return "Пока не могу проанализировать запись, но я её сохранил."
