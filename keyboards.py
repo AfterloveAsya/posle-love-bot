@@ -61,6 +61,17 @@ def tests_menu_kb():
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 
+def premium_upsell_kb():
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💳 499₽/месяц", url="https://b2b.cbrpay.ru/AS1B001960PEAB7E8EURMBD7NVIK1JBJ")],
+            [InlineKeyboardButton(text="💳 2990₽/год (выгодно)", url="https://b2b.cbrpay.ru/BS1B000S6GJK30P18TFPD4AC31QUTHUU")],
+            [InlineKeyboardButton(text="✅ Я оплатил(а)", callback_data="confirm_payment")],
+            [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+        ]
+    )
+
+
 def schema_menu_kb():
     return InlineKeyboardMarkup(
         inline_keyboard=[

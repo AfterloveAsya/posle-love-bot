@@ -3,7 +3,7 @@ from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 import db
 import ai_module
-from keyboards import main_menu_kb, back_to_menu_kb, diary_menu_kb
+from keyboards import main_menu_kb, back_to_menu_kb, diary_menu_kb, premium_upsell_kb
 from loader import bot
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -77,12 +77,22 @@ async def diary_entry(message: types.Message):
         return
     if not db.is_premium(message.from_user.id):
         db.save_diary_entry(message.from_user.id, message.text, response="")
-        await message.answer(
-            "📓 **Запись сохранена!**\n\n"
-            "AI-анализ дневника доступен по подписке Premium.\n"
-            "Оформить: меню → Настройки → Подписка",
-            reply_markup=back_to_menu_kb, parse_mode="Markdown"
-        )
+        days = db.get_user_days(message.from_user.id)
+        if days >= 3:
+            await message.answer(
+                "📓 **Запись сохранена!**\n\n"
+                "Ты уже {days} дней с ботом, и я вижу, как ты стараешься. "
+                "Чтобы получить **AI-анализ** каждой записи и персональную обратную связь, "
+                "оформи подписку — это поддержит твой путь.".format(days=days),
+                reply_markup=premium_upsell_kb(), parse_mode="Markdown"
+            )
+        else:
+            await message.answer(
+                "📓 **Запись сохранена!**\n\n"
+                "AI-анализ дневника доступен по подписке Premium.\n"
+                "Оформить: меню → Настройки → Подписка",
+                reply_markup=back_to_menu_kb, parse_mode="Markdown"
+            )
         return
     await bot.send_chat_action(message.chat.id, action="typing")
     history = [e["entry"] for e in db.get_last_entries(message.from_user.id, limit=3)]

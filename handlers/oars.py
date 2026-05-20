@@ -3,7 +3,7 @@ from aiogram.fsm.context import FSMContext
 from states import OARS
 import db
 import ai_module
-from keyboards import main_menu_kb
+from keyboards import main_menu_kb, premium_upsell_kb
 from loader import bot
 
 router = Router()
@@ -75,11 +75,20 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         if not db.is_premium(message.from_user.id):
             db.clear_user_story(message.from_user.id)
             await state.clear()
-            await message.answer(
-                "📋 **Экспертный разбор** доступен по подписке Premium.\n\n"
-                "Оформить: Настройки → Подписка",
-                reply_markup=main_menu_kb, parse_mode="Markdown"
-            )
+            days = db.get_user_days(message.from_user.id)
+            if days >= 3:
+                await message.answer(
+                    "📋 **Экспертный разбор** доступен по подписке Premium.\n\n"
+                    "Ты уже {days} дней работаешь над собой — это многое говорит о твоей силе. "
+                    "Экспертный разбор откроет глубинные паттерны и даст чёткий план.".format(days=days),
+                    reply_markup=premium_upsell_kb(), parse_mode="Markdown"
+                )
+            else:
+                await message.answer(
+                    "📋 **Экспертный разбор** доступен по подписке Premium.\n\n"
+                    "Оформить: Настройки → Подписка",
+                    reply_markup=main_menu_kb, parse_mode="Markdown"
+                )
             return
         await message.answer("Спасибо. Я анализирую твою историю, чтобы дать экспертный разбор...")
         story = db.get_user_story(message.from_user.id)
@@ -114,11 +123,20 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
     analysis_count = db.get_analysis_count(callback.from_user.id)
     db.clear_user_story(callback.from_user.id)
     if not db.is_premium(callback.from_user.id):
-        await callback.message.answer(
-            "🔍 **Углублённый разбор** — премиум-функция.\n\n"
-            "Оформить подписку: Настройки → Подписка",
-            reply_markup=main_menu_kb
-        )
+        days = db.get_user_days(callback.from_user.id)
+        if days >= 3:
+            await callback.message.answer(
+                "🔍 **Углублённый разбор** — премиум-функция.\n\n"
+                "Ты уже {days} дней в работе — это серьёзный шаг. "
+                "Углублённый разбор поможет увидеть то, что скрыто от глаз.".format(days=days),
+                reply_markup=premium_upsell_kb()
+            )
+        else:
+            await callback.message.answer(
+                "🔍 **Углублённый разбор** — премиум-функция.\n\n"
+                "Оформить подписку: Настройки → Подписка",
+                reply_markup=main_menu_kb
+            )
         await callback.answer()
         return
     if analysis_count == 0:

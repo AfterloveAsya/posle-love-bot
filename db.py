@@ -27,9 +27,14 @@ def init_db():
             is_premium INTEGER DEFAULT 0,
             premium_until TEXT,
             morning_hour INTEGER DEFAULT 6,
-            evening_hour INTEGER DEFAULT 18
+            evening_hour INTEGER DEFAULT 18,
+            created_at TEXT
         )
     ''')
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN created_at TEXT")
+    except sqlite3.OperationalError:
+        pass
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_story (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -86,14 +91,18 @@ def save_diagnosis(user_id: int, state: str, score: int):
     conn = get_connection()
     cursor = conn.cursor()
     now = datetime.now().isoformat()
-    cursor.execute('''
-        INSERT INTO users (user_id, state, score, updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET
-            state = excluded.state,
-            score = excluded.score,
-            updated_at = excluded.updated_at
-    ''', (user_id, state, score, now))
+    cursor.execute('SELECT created_at FROM users WHERE user_id = ?', (user_id,))
+    existing = cursor.fetchone()
+    if existing:
+        cursor.execute('UPDATE users SET state = ?, score = ?, updated_at = ? WHERE user_id = ?',
+                       (state, score, now, user_id))
+        if not existing["created_at"]:
+            cursor.execute('UPDATE users SET created_at = ? WHERE user_id = ?', (now, user_id))
+    else:
+        cursor.execute('''
+            INSERT INTO users (user_id, state, score, updated_at, created_at)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, state, score, now, now))
     cursor.execute('INSERT INTO diagnosis_log (user_id, state, score, timestamp) VALUES (?, ?, ?, ?)',
                    (user_id, state, score, now))
     conn.commit()
@@ -354,3 +363,15 @@ def get_streak_count(user_id: int) -> int:
         else:
             break
     return streak
+
+
+def get_user_days(user_id: int) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT created_at FROM users WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row and row["created_at"]:
+        created = datetime.fromisoformat(row["created_at"])
+        return (datetime.now() - created).days
+    return 0
