@@ -115,7 +115,14 @@ async def process_diag_answer(callback: types.CallbackQuery, state: FSMContext):
     answer_index = int(callback.data.split("_")[-1])
     data = await state.get_data()
     question_index = data.get("question_index", 0)
-    score = DIAGNOSIS_QUESTIONS[question_index]["options"][answer_index][1]
+    if question_index >= len(DIAGNOSIS_QUESTIONS):
+        await callback.answer("Диагностика уже завершена", show_alert=True)
+        return
+    options = DIAGNOSIS_QUESTIONS[question_index]["options"]
+    if answer_index >= len(options):
+        await callback.answer("Используй актуальные кнопки", show_alert=True)
+        return
+    score = options[answer_index][1]
     new_total = data.get("total_score", 0) + score
     await state.update_data(total_score=new_total, question_index=question_index + 1)
     await callback.answer()

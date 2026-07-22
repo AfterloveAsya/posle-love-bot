@@ -2,6 +2,7 @@ import asyncio
 import aiohttp
 import logging
 import os
+import re
 
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -141,3 +142,67 @@ async def expert_analysis(user_story: list, user_context: str = "") -> str:
     except Exception as e:
         logging.error(f"Expert analysis failed: {e}")
         return "Не удалось провести экспертный анализ, но я сохраню твою историю."
+
+
+def parse_expert_response(response: str) -> dict:
+    mode = pattern = advice = ""
+    m = re.search(r'\*\*[🧠*]*\s*Ведущий режим:\*\*\s*(.*?)(?:\n|$)', response)
+    if m: mode = m.group(1).strip()
+    m = re.search(r'\*\*[🔍*]*\s*Паттерн:\*\*\s*(.*?)(?:\n|$)', response)
+    if m: pattern = m.group(1).strip()
+    m = re.search(r'\*\*[📌*]*\s*Что делать:\*\*\s*(.*?)(?:\n|$)', response)
+    if m: advice = m.group(1).strip()
+    return {"mode": mode, "pattern": pattern, "advice": advice}
+
+
+DIALOG_SYSTEM_PROMPT = (
+    "Ты — опытный психотерапевт, специализирующийся на работе с расставанием и утратой. "
+    "Ты уже провёл(а) с клиентом диагностику и знаешь его контекст. "
+    "Сейчас вы находитесь в свободном диалоге — клиент задаёт вопросы или делится тем, что приходит. "
+    "Твоя задача:\n"
+    "- Продолжать диалог естественно и бережно\n"
+    "- Опираться на известный контекст (состояние, режим, тесты)\n"
+    "- Давать конкретные, практичные советы\n"
+    "- Задавать уточняющие вопросы, чтобы углублять понимание\n"
+    "- Использовать русский язык, говорить тепло, но профессионально\n\n"
+    "ВАЖНО:\n"
+    "- Не повторяй разбор заново — ты уже его сделал(а)\n"
+    "- Отвечай на то, что клиент сказал сейчас\n"
+    "- Если клиент спрашивает про прошлый анализ — поясняй, а не копируй\n"
+    "- Длина ответа: 2-5 предложений + вопрос\n"
+    "- Не пиши «как твой AI-психолог» — ты часть бота «После любви»"
+)
+
+
+async def premium_dialog(user_message: str, user_context: str, history: list) -> str:
+    system = DIALOG_SYSTEM_PROMPT
+    if user_context:
+        system += f"\n\nКОНТЕКСТ ПОЛЬЗОВАТЕЛЯ:\n{user_context}"
+    messages = [{"role": "system", "content": system}]
+    for msg in history[-10:]:
+        messages.append(msg)
+    messages.append({"role": "user", "content": user_message})
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://posle-love-bot.ru",
+        "X-Title": "После любви"
+    }
+    payload = {
+        "model": MODEL_EXPERT,
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 600
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(OPENROUTER_URL, json=payload, headers=headers, timeout=60) as resp:
+                if resp.status != 200:
+                    error_text = await resp.text()
+                    logging.error(f"OpenRouter dialog error {resp.status}: {error_text[:300]}")
+                    return "Не могу ответить. Попробуй ещё раз."
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logging.error(f"Dialog failed: {e}")
+        return "Не могу ответить. Попробуй ещё раз."

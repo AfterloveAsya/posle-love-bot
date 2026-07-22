@@ -1,9 +1,10 @@
 from aiogram import Router, types, F
+from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
-from states import OARS
+from states import OARS, PremiumChat
 import db
 import ai_module
-from keyboards import main_menu_kb, premium_upsell_kb
+from keyboards import main_menu_kb, premium_upsell_kb, back_to_menu_kb
 from loader import bot
 
 router = Router()
@@ -94,7 +95,15 @@ async def process_confirmation(message: types.Message, state: FSMContext):
         story = db.get_user_story(message.from_user.id)
         story_text = "\n".join(f"{s['q']}: {s['a']}" for s in story)
         analysis = await ai_module.expert_analysis(story, user_context=db.get_user_context(message.from_user.id))
-        await message.answer(analysis, reply_markup=main_menu_kb)
+        await message.answer(analysis)
+        parsed = ai_module.parse_expert_response(analysis)
+        if parsed["mode"] or parsed["pattern"]:
+            db.save_user_pattern(
+                message.from_user.id,
+                mode=parsed["mode"],
+                pattern=parsed["pattern"],
+                advice=parsed["advice"]
+            )
         user_state = db.get_user_state(message.from_user.id)
         db.save_analysis(
             user_id=message.from_user.id,
@@ -104,7 +113,9 @@ async def process_confirmation(message: types.Message, state: FSMContext):
             story=story_text
         )
         db.clear_user_story(message.from_user.id)
-        await state.clear()
+        await state.update_data(history=[{"role": "assistant", "content": analysis}])
+        await message.answer("💬 Если хочешь продолжить — просто напиши мне. Я здесь, чтобы помочь разобраться глубже. (напиши «выход» чтобы закончить)")
+        await state.set_state(PremiumChat.active)
     elif message.text.lower().strip() in ("нет", "нет.", "нет!", "назад", "меню", "выйти"):
         await state.clear()
         await message.answer("Главное меню:", reply_markup=main_menu_kb)
@@ -157,3 +168,30 @@ async def deep_analysis(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.set_state(OARS.waiting_situation)
     await callback.answer()
+
+
+EXIT_WORDS = {"меню", "выход", "выйти", "стоп", "хватит", "спасибо", "закончить", "назад", "отмена"}
+
+
+@router.message(PremiumChat.active)
+async def premium_chat(message: types.Message, state: FSMContext):
+    text = message.text.strip().lower()
+    if text in EXIT_WORDS:
+        await state.clear()
+        await message.answer("Главное меню:", reply_markup=main_menu_kb)
+        return
+    data = await state.get_data()
+    history = data.get("history", [])
+    await bot.send_chat_action(message.chat.id, action="typing")
+    context = db.get_user_context(message.from_user.id)
+    response = await ai_module.premium_dialog(
+        user_message=message.text,
+        user_context=context,
+        history=history
+    )
+    history.append({"role": "user", "content": message.text})
+    history.append({"role": "assistant", "content": response})
+    if len(history) > 20:
+        history = history[-20:]
+    await state.update_data(history=history)
+    await message.answer(response, reply_markup=back_to_menu_kb)

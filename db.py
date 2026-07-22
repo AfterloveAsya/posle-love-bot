@@ -83,6 +83,17 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_patterns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            mode TEXT,
+            pattern TEXT,
+            advice TEXT,
+            source TEXT DEFAULT 'expert',
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -335,6 +346,16 @@ def get_user_context(user_id: int) -> str:
     n = get_analysis_count(user_id)
     if n:
         lines.append(f"Проведено разборов: {n}")
+    pattern = get_last_user_pattern(user_id)
+    if pattern:
+        lines.append(f"Последний выявленный режим: {pattern['mode']}")
+        lines.append(f"Паттерн поведения: {pattern['pattern']}")
+        if pattern['advice']:
+            lines.append(f"Рекомендация: {pattern['advice']}")
+    last_analysis = get_last_analysis(user_id)
+    if last_analysis:
+        preview = last_analysis['analysis'][:200]
+        lines.append(f"Суть последнего разбора: {preview}")
     d = get_diary_count(user_id)
     if d:
         lines.append(f"Записей в дневнике: {d}")
@@ -375,3 +396,30 @@ def get_user_days(user_id: int) -> int:
         created = datetime.fromisoformat(row["created_at"])
         return (datetime.now() - created).days
     return 0
+
+
+def save_user_pattern(user_id: int, mode: str, pattern: str, advice: str = "", source: str = "expert"):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('INSERT INTO user_patterns (user_id, mode, pattern, advice, source, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+                   (user_id, mode, pattern, advice, source, datetime.now().isoformat()))
+    conn.commit()
+    conn.close()
+
+
+def get_last_user_pattern(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT mode, pattern, advice, source, timestamp FROM user_patterns WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_user_patterns(user_id: int, limit: int = 5):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT mode, pattern, advice, timestamp FROM user_patterns WHERE user_id = ? ORDER BY id DESC LIMIT ?', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]

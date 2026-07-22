@@ -19,3 +19,6 @@ class BeckTest(StatesGroup):
 
 class Tests(StatesGroup):
     waiting = State()
+
+class PremiumChat(StatesGroup):
+    active = State()
