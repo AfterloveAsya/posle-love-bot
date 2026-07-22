@@ -67,7 +67,8 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
             {"role": "user", "content": user_content}
         ],
         "temperature": 0.7,
-        "max_tokens": 600
+        "max_tokens": 600,
+        "provider": {"order": ["OpenAI"], "allow_fallbacks": false}
     }
     try:
         async with aiohttp.ClientSession() as session:
