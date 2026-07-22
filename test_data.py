@@ -45,8 +45,10 @@ def calculate_state(total_score: int) -> str:
         return "кризис"
     elif total_score >= 7:
         return "стабилизация"
-    else:
+    elif total_score >= 3:
         return "восстановление"
+    else:
+        return "здоров"
 
 BECK_QUESTIONS = [
     ("Грусть", [

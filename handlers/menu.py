@@ -32,7 +32,7 @@ async def show_my_state(callback: types.CallbackQuery):
         ])
         await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=kb)
     else:
-        emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
+        emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}
         user_state = user_data.get("state")
         if not user_state:
             tb = InlineKeyboardMarkup(inline_keyboard=[
@@ -44,7 +44,7 @@ async def show_my_state(callback: types.CallbackQuery):
             return
         total = user_data["score"] or 0
         updated = user_data.get("updated_at", "")[:10] if user_data.get("updated_at") else "—"
-        level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
+        level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else ("🟢 Восстановление" if total >= 3 else "⭐ Здоров"))
         progress_bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
         premium = "⭐ Premium" if db.is_premium(callback.from_user.id) else "—"
         diary_n = db.get_diary_count(callback.from_user.id)
@@ -72,7 +72,7 @@ async def show_my_state(callback: types.CallbackQuery):
         if len(diag_log) > 1:
             text += "\n**История диагностик:**\n"
             for d in diag_log:
-                e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
+                e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}.get(d['state'], '')
                 text += f"  {d['timestamp'][:10]}: {e} {d['score']} баллов\n"
         text += "\nМожешь пройти диагностику заново в любой момент."
         buttons = [[InlineKeyboardButton(text="🔄 Пройти заново", callback_data="start_diagnosis")],
@@ -96,8 +96,8 @@ async def diagnostic_card(callback: types.CallbackQuery):
         await callback.answer()
         return
     total = user_data["score"] or 0
-    emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}
-    level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else "🟢 Восстановление")
+    emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}
+    level = "🔴 Кризис" if total >= 15 else ("🟡 Стабилизация" if total >= 7 else ("🟢 Восстановление" if total >= 3 else "⭐ Здоров"))
     bar = "🟥" * min(total, 21) + "⬜" * (21 - min(total, 21))
     premium = "⭐ Premium" if db.is_premium(uid) else "—"
 
@@ -110,7 +110,7 @@ async def diagnostic_card(callback: types.CallbackQuery):
     if diag_log:
         lines.append("**📈 История диагностик:**")
         for d in diag_log:
-            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(d['state'], '')
+            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}.get(d['state'], '')
             lines.append(f"{d['timestamp'][:10]}: {e} {d['state']} ({d['score']})")
 
     tests = db.get_test_results(uid, limit=10)
@@ -125,7 +125,7 @@ async def diagnostic_card(callback: types.CallbackQuery):
     if analyses:
         lines.append("\n**📋 Разборы:**")
         for a in analyses:
-            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(a['state'], '')
+            e = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}.get(a['state'], '')
             lines.append(f"{a['timestamp'][:10]}: {e} {a['state']} ({a['score']})")
 
     lines.append(f"\n📔 Записей в дневнике: {db.get_diary_count(uid)}")
@@ -153,7 +153,7 @@ async def show_my_analysis(callback: types.CallbackQuery):
     buttons = []
     for a in analyses:
         date = a["timestamp"][:10]
-        em = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢"}.get(a["state"], "")
+        em = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}.get(a["state"], "")
         buttons.append([InlineKeyboardButton(text=f"{em} {date} — {a['score']} баллов", callback_data=f"aview_{a['id']}")])
     buttons.append([InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")])
     await callback.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="Markdown")
