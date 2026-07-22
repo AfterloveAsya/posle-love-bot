@@ -77,11 +77,38 @@ async def confirm_payment(callback: types.CallbackQuery):
         "Спасибо! Твоя оплата проверяется. Мы активируем подписку в ближайшее время.",
         reply_markup=back_to_menu_kb
     )
+    admin_kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="✅ Активировать Premium", callback_data=f"admin_activate_{user.id}")]
+        ]
+    )
     await bot.send_message(
         chat_id=ADMIN_USER_ID,
-        text=f"🔔 Пользователь @{user.username or 'нет username'} (ID: {user.id}) оплатил подписку. Проверьте и активируйте командой:\n`/activate {user.id}`",
-        parse_mode="Markdown"
+        text=f"🔔 Пользователь @{user.username or 'нет username'} (ID: {user.id}) оплатил подписку.",
+        reply_markup=admin_kb
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin_activate_"))
+async def admin_activate(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_USER_ID:
+        await callback.answer("Нет доступа", show_alert=True)
+        return
+    user_id = int(callback.data.split("_")[-1])
+    if db.activate_premium(user_id, days=365):
+        await callback.message.edit_text(
+            f"✅ Premium активирован для {user_id}",
+            reply_markup=None
+        )
+        try:
+            await bot.send_message(user_id, "🎉 Твоя Premium-подписка активирована администратором!")
+        except Exception:
+            await callback.message.answer("Юзер не найден в чатах.")
+    else:
+        await callback.message.edit_text(
+            f"❌ Пользователь {user_id} не найден в БД. Сначала нужно пройти /start."
+        )
     await callback.answer()
 
 
