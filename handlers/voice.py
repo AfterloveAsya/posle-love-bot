@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from states import VoiceConfirm
 from keyboards import main_menu_kb
 from loader import bot
-from handlers.oars import process_situation, process_emotion, process_body, process_thought, process_behavior
+from handlers.oars import process_situation, process_emotion, process_body, process_thought, process_behavior, premium_chat
 from handlers.diary import diary_entry
 
 router = Router()
@@ -66,6 +66,8 @@ async def voice_confirm(message: types.Message, state: FSMContext):
         elif "Diagnosis:" in original_state:
             await state.clear()
             await message.answer("Пожалуйста, выбери вариант из кнопок ниже 👇")
+        elif "PremiumChat" in original_state:
+            await premium_chat(new_msg, state)
         else:
             await state.clear()
     else:
