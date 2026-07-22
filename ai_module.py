@@ -42,7 +42,9 @@ DIARY_SYSTEM_PROMPT = (
 async def analyze_diary_entry(text: str, history: list = None, username: str = "", is_first_today: bool = True, user_context: str = "") -> str:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://posle-love-bot.ru",
+        "X-Title": "После любви"
     }
     system = DIARY_SYSTEM_PROMPT
     if user_context:
@@ -113,7 +115,9 @@ async def expert_analysis(user_story: list, user_context: str = "") -> str:
         system += f"\n\nКонтекст пользователя:\n{user_context}"
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://posle-love-bot.ru",
+        "X-Title": "После любви"
     }
     payload = {
         "model": MODEL_EXPERT,
