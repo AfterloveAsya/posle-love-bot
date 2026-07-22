@@ -92,6 +92,7 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
             ),
         }
 
+        db.clear_user_story(message.chat.id)
         await message.answer(result_texts[user_state] + followup_questions[user_state])
         await state.set_state(OARS.waiting_situation)
         return
