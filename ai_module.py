@@ -7,7 +7,7 @@ import re
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-MODEL_DIARY = "openai/gpt-4o"
+MODEL_DIARY = "deepseek/deepseek-chat"
 MODEL_EXPERT = "deepseek/deepseek-chat"
 
 DIARY_SYSTEM_PROMPT = (
@@ -68,8 +68,7 @@ async def analyze_diary_entry(text: str, history: list = None, username: str = "
             {"role": "user", "content": user_content}
         ],
         "temperature": 0.7,
-        "max_tokens": 600,
-        "provider": {"order": ["OpenAI"], "allow_fallbacks": false}
+        "max_tokens": 600
     }
     try:
         async with aiohttp.ClientSession() as session:
