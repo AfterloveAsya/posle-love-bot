@@ -24,56 +24,58 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
     if index >= len(DIAGNOSIS_QUESTIONS):
         total = data.get("total_score", 0)
         user_state = calculate_state(total)
-        db.save_diagnosis(message.chat.id, user_state, total)
+        user_id = message.chat.id
+        
+        # Сохраняем базовый диагноз
+        db.save_diagnosis(user_id, user_state, total)
+        
+        # Импортируем функции для расширенной диагностики
+        from diagnosis import calculate_severity, get_therapy_types
+        import json
+        
+        # Получаем информацию о тяжести
+        severity = calculate_severity(total, user_state)
+        
+        # Получаем рекомендованные методы терапии
+        therapies = get_therapy_types(user_state, severity["level"])
+        
+        # Получаем контекст анамнеза
+        intake = db.get_intake(user_id)
+        intake_context = ""
+        if intake:
+            intake_context = f"Время после расставания: {intake.get('breakup_date', '')}; Инициатор: {intake.get('initiator', '')}; Длительность отношений: {intake.get('relationship_duration', '')}"
+        
+        # Сохраняем полный диагноз
+        therapies_json = json.dumps(therapies)
+        db.save_diagnosis_report(
+            user_id, 
+            user_state, 
+            total, 
+            severity["level"],
+            severity["code"],
+            severity["description"],
+            therapies_json,
+            intake_context
+        )
 
-        followup_questions = {
-            "кризис": (
-                "\n\nТы сейчас в самом тяжёлом месте. Это нормально. "
-                "Можешь не рассказывать ничего, если не готов(а). "
-                "Но если хочешь — просто скажи, сколько времени прошло после расставания. Я рядом."
-            ),
-            "стабилизация": (
-                "\n\nТы уже держишься, но внутри ещё больно. "
-                "Расскажи, что сейчас всплывает чаще всего — воспоминания, обида, тревога? Что крутится в голове?"
-            ),
-            "восстановление": (
-                "\n\nТы уже прошёл(а) большой путь. "
-                "Что изменилось в тебе за это время? "
-                "Есть что-то, что ты сейчас видишь иначе, чем в первые дни после расставания?"
-            ),
-            "здоров": (
-                "\n\nКакие у тебя планы или мечты на ближайшее время? "
-                "Что приносит тебе радость и энергию сейчас?"
-            ),
-        }
+        # Выводим результат с информацией о тяжести
+        result_text = (
+            f"🔍 **ДИАГНОСТИЧЕСКИЙ ОТЧЁТ**\n\n"
+            f"**Состояние:** {user_state}\n"
+            f"**Баллы:** {total}\n"
+            f"**Степень тяжести:** {severity['level']}\n\n"
+            f"{severity['description']}\n\n"
+            f"**Рекомендуемые методы работы:**\n"
+        )
+        
+        for i, therapy in enumerate(therapies, 1):
+            result_text += f"{i}. **{therapy['name']}** — {therapy['description']}\n"
+        
+        result_text += f"\n{severity['recommendation']}"
 
-        result_texts = {
-            "кризис": (
-                "🔴 Твой результат: кризисное состояние.\n\n"
-                "Сейчас тебе особенно тяжело. Это нормально — испытывать такую боль после расставания. "
-                "В ближайшие дни я буду присылать тебе щадящие техники заземления, которые помогут "
-                "пережить самые острые моменты. Помни: это пройдёт."
-            ),
-            "стабилизация": (
-                "🟡 Твой результат: стабилизация.\n\n"
-                "Ты уже начал(а) справляться, но боль ещё возвращается. "
-                "Мы будем работать над укреплением внутренней опоры и разбором повторяющихся мыслей."
-            ),
-            "восстановление": (
-                "🟢 Твой результат: восстановление.\n\n"
-                "Ты прошёл(а) самый сложный этап. Это не значит, что всё идеально, но ресурсы для роста уже есть. "
-                "Я помогу тебе углубить понимание себя и вернуть радость жизни."
-            ),
-            "здоров": (
-                "⭐ Твой результат: здоровое состояние.\n\n"
-                "Похоже, ты уже прошёл(а) основную боль расставания. "
-                "Это не значит, что воспоминания не возвращаются, но они больше не управляют тобой. "
-                "Если хочешь — можем просто поговорить о том, что для тебя сейчас важно."
-            ),
-        }
-
-        db.clear_user_story(message.chat.id)
-        await message.answer(result_texts[user_state] + followup_questions[user_state])
+        db.clear_user_story(user_id)
+        await message.answer(result_text)
+        await message.answer("Теперь давайте углубимся в твою ситуацию. Я задам тебе несколько вопросов.")
         await state.set_state(OARS.waiting_situation)
         return
 

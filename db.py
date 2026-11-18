@@ -106,6 +106,20 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS diagnoses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            state TEXT,
+            score INTEGER,
+            severity_level TEXT,
+            severity_code TEXT,
+            severity_description TEXT,
+            therapies TEXT,
+            intake_context TEXT,
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -484,3 +498,43 @@ def get_intake(user_id: int):
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def save_diagnosis_report(user_id: int, state: str, score: int, severity_level: str, severity_code: str, 
+                         severity_description: str, therapies_json: str, intake_context: str = ""):
+    """Сохраняет полный диагностический отчёт"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute('''
+        INSERT INTO diagnoses (user_id, state, score, severity_level, severity_code, severity_description, therapies, intake_context, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, state, score, severity_level, severity_code, severity_description, therapies_json, intake_context, now))
+    conn.commit()
+    conn.close()
+
+
+def get_last_diagnosis_report(user_id: int):
+    """Получает последний диагностический отчёт"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT state, score, severity_level, severity_code, severity_description, therapies, intake_context, timestamp
+        FROM diagnoses WHERE user_id = ? ORDER BY id DESC LIMIT 1
+    ''', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_diagnosis_history(user_id: int, limit: int = 10):
+    """Получает историю диагнозов"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT state, score, severity_level, timestamp FROM diagnoses 
+        WHERE user_id = ? ORDER BY id DESC LIMIT ?
+    ''', (user_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in reversed(rows)]
