@@ -4,9 +4,10 @@ import db
 import scheduler
 from loader import bot, dp
 from handlers import (
-    start, oars, menu, diary, tests, library, settings, voice
+    intake, start, oars, menu, diary, tests, library, settings, voice
 )
 
+dp.include_router(intake.router)
 dp.include_router(start.router)
 dp.include_router(oars.router)
 dp.include_router(menu.router)

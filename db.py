@@ -36,6 +36,18 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_intake (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE,
+            breakup_date TEXT,
+            initiator TEXT,
+            relationship_duration TEXT,
+            children TEXT,
+            previous_breakups TEXT,
+            timestamp TEXT
+        )
+    ''')
+    cursor.execute('''
         CREATE TABLE IF NOT EXISTS user_story (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -335,33 +347,60 @@ def get_last_diary_date(user_id: int) -> str:
 
 def get_user_context(user_id: int) -> str:
     lines = []
+    
+    # Анамнез
+    intake = get_intake(user_id)
+    if intake:
+        if intake.get("breakup_date"):
+            lines.append(f"Время после расставания: {intake['breakup_date']}")
+        if intake.get("initiator"):
+            lines.append(f"Инициатор расставания: {intake['initiator']}")
+        if intake.get("relationship_duration"):
+            lines.append(f"Длительность отношений: {intake['relationship_duration']}")
+        if intake.get("children"):
+            lines.append(f"Дети/имущество: {intake['children']}")
+    
+    # Текущее состояние
     u = get_user_state(user_id)
     if u and u.get("state"):
         lines.append(f"Текущее состояние: {u['state']} ({u['score']} баллов)")
+    
+    # Тесты
     tests = get_test_results(user_id, limit=3)
     if tests:
         names = {"bdi": "BDI", "bai": "BAI", "bhs": "BHS", "gad7": "GAD-7", "ptgi": "PTGI", "dass21": "DASS-21", "luscher": "Люшер"}
         test_line = "; ".join(f"{names.get(t['test_id'], t['test_id'])}: {t['score']} баллов" for t in tests)
         lines.append(f"Последние тесты: {test_line}")
+    
+    # Анализы
     n = get_analysis_count(user_id)
     if n:
         lines.append(f"Проведено разборов: {n}")
+    
+    # Паттерны
     pattern = get_last_user_pattern(user_id)
     if pattern:
         lines.append(f"Последний выявленный режим: {pattern['mode']}")
         lines.append(f"Паттерн поведения: {pattern['pattern']}")
         if pattern['advice']:
             lines.append(f"Рекомендация: {pattern['advice']}")
+    
+    # Последний разбор
     last_analysis = get_last_analysis(user_id)
     if last_analysis:
         preview = last_analysis['analysis'][:200]
         lines.append(f"Суть последнего разбора: {preview}")
+    
+    # Дневник
     d = get_diary_count(user_id)
     if d:
         lines.append(f"Записей в дневнике: {d}")
+    
+    # Streak
     streak = get_streak_count(user_id)
     if streak > 1:
         lines.append(f"Дней подряд в дневнике: {streak}")
+    
     return "\n".join(lines) if lines else ""
 
 
@@ -423,3 +462,25 @@ def get_all_user_patterns(user_id: int, limit: int = 5):
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def save_intake(user_id: int, breakup_date: str, initiator: str, relationship_duration: str, children: str, previous_breakups: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    cursor.execute('''
+        INSERT OR REPLACE INTO user_intake 
+        (user_id, breakup_date, initiator, relationship_duration, children, previous_breakups, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, breakup_date, initiator, relationship_duration, children, previous_breakups, now))
+    conn.commit()
+    conn.close()
+
+
+def get_intake(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT breakup_date, initiator, relationship_duration, children, previous_breakups, timestamp FROM user_intake WHERE user_id = ?', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None

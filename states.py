@@ -1,5 +1,12 @@
 from aiogram.fsm.state import State, StatesGroup
 
+class Intake(StatesGroup):
+    waiting_breakup_date = State()
+    waiting_initiator = State()
+    waiting_relationship_duration = State()
+    waiting_children = State()
+    waiting_previous_breakups = State()
+
 class Diagnosis(StatesGroup):
     waiting_answer = State()
 

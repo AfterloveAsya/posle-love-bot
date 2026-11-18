@@ -4,37 +4,17 @@ from aiogram.fsm.context import FSMContext
 from states import Diagnosis, OARS
 import db
 from test_data import DIAGNOSIS_QUESTIONS, calculate_state
-from keyboards import main_menu_kb, start_diagnosis_kb
+from keyboards import main_menu_kb
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
 
-@router.message(Command("start"))
-async def cmd_start(message: types.Message):
-    user_name = message.from_user.first_name or "Дорогой друг"
-    welcome_text = (
-        f"🌿 Привет, {user_name}!\n\n"
-        "Я бот «После любви» — твой анонимный помощник, созданный на основе психологии и схема-терапии.\n\n"
-        "Я помогу тебе:\n"
-        "• Понять своё состояние\n"
-        "• Получать ежедневные поддерживающие задания\n"
-        "• Вести дневник рефлексии с AI-анализом\n"
-        "• Найти техники самопомощи в трудную минуту\n\n"
-        "⚠️ Важно: я не заменяю профессионального психолога. При серьёзных состояниях обратись к специалисту.\n\n"
-        "Всё анонимно. Твои данные не передаются третьим лицам.\n"
-        "Продолжая, ты принимаешь политику конфиденциальности.\n\n"
-        "Давай начнём с диагностики твоего состояния."
-    )
-    await message.answer(welcome_text, reply_markup=start_diagnosis_kb)
-
-
-@router.callback_query(F.data == "start_diagnosis")
-async def start_diagnosis(callback: types.CallbackQuery, state: FSMContext):
+async def start_diagnosis_flow(message: types.Message, state: FSMContext):
+    """Запускает диагностику (вызывается из intake.py)"""
     await state.update_data(question_index=0, total_score=0)
     await state.set_state(Diagnosis.waiting_answer)
-    await callback.answer()
-    await ask_next_question(callback.message, state, is_new_message=True)
+    await ask_next_question(message, state, is_new_message=True)
 
 
 async def ask_next_question(message: types.Message, state: FSMContext, is_new_message: bool = False):
