@@ -4,6 +4,7 @@ import random
 from datetime import datetime
 from aiogram import Bot
 import db
+from followup import get_pending_followups
 
 TASKS = {
     "кризис": [
@@ -44,6 +45,7 @@ EVENING_GREETINGS = [
 async def scheduled_task(bot: Bot):
     logging.info("Scheduler started")
     last_sent = {}
+    last_followup_check = {}
 
     while True:
         now = datetime.utcnow()
@@ -56,6 +58,7 @@ async def scheduled_task(bot: Bot):
             mh = user["morning_hour"]
             eh = user["evening_hour"]
 
+            # Обычные задания утро/вечер
             if current_hour == mh and last_sent.get(f"m_{uid}") != current_date:
                 try:
                     state = user["state"]
@@ -75,5 +78,16 @@ async def scheduled_task(bot: Bot):
                     last_sent[f"e_{uid}"] = current_date
                 except Exception as e:
                     logging.error(f"Evening broadcast failed for {uid}: {e}")
+            
+            # Проверка фоллоу-апов (раз в день в 9:00 UTC)
+            if current_hour == 9 and last_followup_check.get(uid) != current_date:
+                try:
+                    pending = get_pending_followups(uid)
+                    if pending:
+                        for fu in pending:
+                            await bot.send_message(uid, fu["message"])
+                        last_followup_check[uid] = current_date
+                except Exception as e:
+                    logging.error(f"Followup check failed for {uid}: {e}")
 
         await asyncio.sleep(60)

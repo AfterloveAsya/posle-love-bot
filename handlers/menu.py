@@ -7,6 +7,7 @@ from tasks_data import TASKS
 from keyboards import main_menu_kb, back_to_menu_kb
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from progress_monitoring import analyze_progress, get_progress_report_text
+from followup import get_followup_status_text
 
 router = Router()
 
@@ -112,6 +113,8 @@ async def show_my_state(callback: types.CallbackQuery):
         ])
         await callback.message.edit_text("Ты ещё не проходил(а) диагностику.", reply_markup=kb)
     else:
+        # Проверяем фоллоу-апы
+        followup_status = get_followup_status_text(callback.from_user.id)
         emoji = {"кризис": "🔴", "стабилизация": "🟡", "восстановление": "🟢", "здоров": "⭐"}
         user_state = user_data.get("state")
         if not user_state:
@@ -137,7 +140,8 @@ async def show_my_state(callback: types.CallbackQuery):
             f"`{progress_bar}`\nБаллов: {total}/21\n"
             f"Последняя диагностика: {updated}\n"
             f"Статус: {premium}\n"
-            f"📔 Записей в дневнике: {diary_n}"
+            f"📔 Записей в дневнике: {diary_n}\n\n"
+            f"{followup_status}"
         )
         if streak > 1:
             text += f"\n🔥 Дней подряд: {streak}"
