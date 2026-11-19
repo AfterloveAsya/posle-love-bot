@@ -6,6 +6,7 @@ import db
 from tasks_data import TASKS
 from keyboards import main_menu_kb, back_to_menu_kb
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from progress_monitoring import analyze_progress, get_progress_report_text
 
 router = Router()
 
@@ -13,6 +14,85 @@ router = Router()
 @router.message(Command("menu"))
 async def cmd_menu(message: types.Message):
     await message.answer("Главное меню:", reply_markup=main_menu_kb)
+
+
+@router.message(Command("прогресс"))
+async def cmd_progress(message: types.Message):
+    """Показывает отчёт о прогрессе"""
+    user_id = message.from_user.id
+    
+    # Проверяем, есть ли диагностики
+    history = db.get_diagnosis_history(user_id, limit=2)
+    if len(history) < 1:
+        await message.answer(
+            "Нельзя показать прогресс без диагностик. Пройди /start сначала."
+        )
+        return
+    
+    report = get_progress_report_text(user_id)
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+    ])
+    await message.answer(report, reply_markup=kb, parse_mode="Markdown")
+
+
+@router.message(Command("план"))
+async def cmd_treatment_plan(message: types.Message):
+    """Показывает план лечения"""
+    import json
+    user_id = message.from_user.id
+    
+    plan = db.get_treatment_plan(user_id)
+    if not plan:
+        await message.answer(
+            "Плана лечения нет. Пройди /start сначала, чтобы получить персональный план."
+        )
+        return
+    
+    # Парсим JSON план
+    try:
+        plan_data = json.loads(plan.get("short_term_goals", "{}"))
+    except:
+        plan_data = {}
+    
+    text = (
+        f"📋 **ВАША ПРОГРАММА ЛЕЧЕНИЯ**\n\n"
+        f"**Состояние:** {plan.get('state', 'неизвестно')}\n"
+        f"**Степень тяжести:** {plan.get('severity_level', 'неизвестно')}\n"
+        f"**Начало:** {plan.get('start_date', '')[:10]}\n"
+        f"**Предполагаемое завершение:** {plan.get('expected_end_date', '')[:10]}\n\n"
+    )
+    
+    if plan_data and "short_term" in plan_data:
+        st = plan_data["short_term"]
+        text += f"**🎯 Краткосрочные цели** ({st.get('duration', '')})\n"
+        for goal in st.get("goals", [])[:3]:
+            text += f"\n• **{goal.get('goal', '')}**\n"
+            for obj in goal.get("objectives", [])[:3]:
+                text += f"  ✓ {obj}\n"
+        text += "\n"
+    
+    if plan_data and "mid_term" in plan_data:
+        mt = plan_data["mid_term"]
+        text += f"**🎯 Среднесрочные цели** ({mt.get('duration', '')})\n"
+        for goal in mt.get("goals", [])[:3]:
+            text += f"\n• **{goal.get('goal', '')}**\n"
+            for obj in goal.get("objectives", [])[:2]:
+                text += f"  ✓ {obj}\n"
+        text += "\n"
+    
+    if plan_data and "long_term" in plan_data:
+        lt = plan_data["long_term"]
+        text += f"**🎯 Долгосрочные цели** ({lt.get('duration', '')})\n"
+        for goal in lt.get("goals", [])[:2]:
+            text += f"\n• **{goal.get('goal', '')}**\n"
+            for obj in goal.get("objectives", [])[:2]:
+                text += f"  ✓ {obj}\n"
+    
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔙 В главное меню", callback_data="main_menu")]
+    ])
+    await message.answer(text, reply_markup=kb, parse_mode="Markdown")
 
 
 @router.callback_query(F.data == "main_menu")
