@@ -31,6 +31,7 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
         
         # Импортируем функции для расширенной диагностики
         from diagnosis import calculate_severity, get_therapy_types
+        from treatment_plan import generate_treatment_plan
         import json
         
         # Получаем информацию о тяжести
@@ -57,6 +58,11 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
             therapies_json,
             intake_context
         )
+        
+        # Генерируем и сохраняем план лечения
+        treatment_plan = generate_treatment_plan(user_state, severity["level"], intake)
+        plan_json = json.dumps(treatment_plan)
+        db.save_treatment_plan(user_id, user_state, severity["level"], plan_json)
 
         # Выводим результат с информацией о тяжести
         result_text = (
@@ -75,6 +81,25 @@ async def ask_next_question(message: types.Message, state: FSMContext, is_new_me
 
         db.clear_user_story(user_id)
         await message.answer(result_text)
+        
+        # Показываем краткий план лечения
+        if treatment_plan:
+            plan_preview = (
+                f"\n📋 **ПЛАН ЛЕЧЕНИЯ**\n\n"
+                f"**Краткосрочные цели** ({treatment_plan.get('short_term', {}).get('duration', '')}):\n"
+            )
+            short_goals = treatment_plan.get('short_term', {}).get('goals', [])
+            for goal in short_goals[:2]:  # Показываем первые 2 цели
+                plan_preview += f"• {goal.get('goal', '')}\n"
+            
+            plan_preview += f"\n**Среднесрочные цели** ({treatment_plan.get('mid_term', {}).get('duration', '')}):\n"
+            mid_goals = treatment_plan.get('mid_term', {}).get('goals', [])
+            for goal in mid_goals[:2]:
+                plan_preview += f"• {goal.get('goal', '')}\n"
+            
+            plan_preview += f"\n(Полный план можно посмотреть командой /план)"
+            await message.answer(plan_preview)
+        
         await message.answer("Теперь давайте углубимся в твою ситуацию. Я задам тебе несколько вопросов.")
         await state.set_state(OARS.waiting_situation)
         return

@@ -120,6 +120,21 @@ def init_db():
             timestamp TEXT
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS treatment_plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER UNIQUE,
+            state TEXT,
+            severity_level TEXT,
+            short_term_goals TEXT,
+            mid_term_goals TEXT,
+            long_term_goals TEXT,
+            start_date TEXT,
+            expected_end_date TEXT,
+            status TEXT DEFAULT 'active',
+            timestamp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -538,3 +553,55 @@ def get_diagnosis_history(user_id: int, limit: int = 10):
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in reversed(rows)]
+
+
+def save_treatment_plan(user_id: int, state: str, severity_level: str, plan_json: str, 
+                       start_date: str = None, expected_end_date: str = None):
+    """Сохраняет план лечения"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    now = datetime.now().isoformat()
+    if not start_date:
+        start_date = now
+    
+    # Для разных длительностей план может быть 3-6 месяцев
+    if not expected_end_date:
+        if severity_level == "тяжёлая":
+            months = 6
+        elif severity_level == "средняя":
+            months = 4
+        else:
+            months = 3
+        expected_end = datetime.now() + timedelta(days=30*months)
+        expected_end_date = expected_end.isoformat()
+    
+    cursor.execute('''
+        INSERT OR REPLACE INTO treatment_plans 
+        (user_id, state, severity_level, short_term_goals, mid_term_goals, long_term_goals, start_date, expected_end_date, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (user_id, state, severity_level, plan_json, "", "", start_date, expected_end_date, now))
+    conn.commit()
+    conn.close()
+
+
+def get_treatment_plan(user_id: int):
+    """Получает текущий план лечения"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT state, severity_level, short_term_goals, mid_term_goals, long_term_goals, 
+               start_date, expected_end_date, status, timestamp
+        FROM treatment_plans WHERE user_id = ? AND status = 'active' ORDER BY id DESC LIMIT 1
+    ''', (user_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_treatment_plan_status(user_id: int, status: str):
+    """Обновляет статус плана лечения"""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute('UPDATE treatment_plans SET status = ? WHERE user_id = ?', (status, user_id))
+    conn.commit()
+    conn.close()
